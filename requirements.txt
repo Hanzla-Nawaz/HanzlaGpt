@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+langchain-community
+langchain
+openai
+psycopg2-binary
+pdfplumber
+tiktoken
+python-dotenv
+pydantic-settings
