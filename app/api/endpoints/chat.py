@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from app.schemas.schema import QueryRequest, QueryResponse, ChatHistoryResponse, HealthCheckResponse, ErrorResponse
 from app.core.database import log_chat, get_chat_history
-from app.core.vectorstore import create_vector_store
+from app.core.vectorstore import create_vector_store, search_across_namespaces, get_category_specific_context
 from app.core.llm_providers import provider_manager
 from app.core.provider_router import provider_router
 from app.templates.prompts import (
@@ -54,11 +54,11 @@ def get_vector_store():
         _vector_store = create_vector_store()
     return _vector_store
 
-def get_chains():
+def get_chains(user_id: str = None, session_id: str = None):
     """Get LLM chains with fallback."""
     global _chains
     # Always refresh chains to use current LLM provider
-    llm = get_llm()
+    llm = get_llm(user_id, session_id)
     if llm is None:
         raise HTTPException(status_code=503, detail="LLM service unavailable")
         
@@ -163,7 +163,16 @@ def fallback_intent_detection(query: str) -> Dict[str, Any]:
 def get_response_by_intent(query: str, intent: str, vector_store=None, user_id=None, session_id=None) -> str:
     """Get response based on intent with fallback."""
     try:
-        chains = get_chains()
+        # Use user-specific LLM if user_id is provided
+        if user_id:
+            chains = get_chains(user_id, session_id)
+        else:
+            # Create a unique user ID for provider rotation
+            import hashlib
+            import time
+            user_id = f"user_{int(time.time()) % 1000}"
+            chains = get_chains(user_id, session_id)
+        
         if not chains:
             # No LLM available, use intent-based responses
             return get_intent_based_response(query, intent, user_id, session_id)
@@ -245,15 +254,150 @@ def get_response_by_intent(query: str, intent: str, vector_store=None, user_id=N
         chain = chains.get(chain_name)
         if not chain:
             return "I apologize, but I'm having trouble processing your request right now. Please try again later."
-        # Prepare context for RAG
+        # Prepare context for RAG with enhanced namespace search
         context = ""
-        if vector_store and intent in ['general_rag', 'personal_info']:
+        
+        # ALWAYS try to retrieve from Pinecone for any intent that might need context
+        if vector_store:
             try:
-                # Get relevant documents
-                docs = vector_store.similarity_search(query, k=3)
-                context = "\n\n".join([doc.page_content for doc in docs])
+                logger.info(f"🔍 Attempting Pinecone retrieval for intent: {intent}")
+                
+                # For background-related queries, prioritize background namespace
+                if any(keyword in query.lower() for keyword in ['background', 'education', 'experience', 'degree', 'graduated', 'completed', 'hanzla']):
+                    logger.info("🎯 Detected background-related query, prioritizing background namespace")
+                    background_context = get_category_specific_context(query, 'background', top_k=3)
+                    if background_context:
+                        logger.info(f"✅ Found {len(background_context)} results from background namespace")
+                        context = "\n\n".join(background_context)
+                        logger.info(f"📝 Context length: {len(context)} characters")
+                    else:
+                        # Fallback to cross-namespace search
+                        search_results = search_across_namespaces(query, top_k=5)
+                        if search_results:
+                            logger.info(f"✅ Found {len(search_results)} results from cross-namespace search")
+                            context_parts = []
+                            for result in search_results[:3]:  # Top 3 results
+                                doc_content = result['document'].page_content
+                                category = result['category']
+                                context_parts.append(f"[{category.upper()}] {doc_content}")
+                            context = "\n\n".join(context_parts)
+                            logger.info(f"📝 Context length: {len(context)} characters")
+                
+                # For project-related queries, prioritize projects namespace
+                elif any(keyword in query.lower() for keyword in ['project', 'work', 'developed', 'built', 'created']):
+                    logger.info("🎯 Detected project-related query, prioritizing projects namespace")
+                    
+                    # For generic project queries, try specific project keywords
+                    if 'project' in query.lower() and not any(specific in query.lower() for specific in ['melanoma', 'breast', 'diabetes', 'nutrition', 'lung', 'cancer']):
+                        logger.info("🔍 Generic project query detected, trying specific project keywords")
+                        # Try multiple specific project queries to get comprehensive results
+                        project_keywords = [
+                            "melanoma cancer prediction",
+                            "breast cancer classification", 
+                            "diabetes prediction",
+                            "nutrition analyzer",
+                            "lung cancer classification"
+                        ]
+                        
+                        all_project_context = []
+                        for keyword in project_keywords:
+                            keyword_context = get_category_specific_context(keyword, 'projects', top_k=1)
+                            if keyword_context:
+                                all_project_context.extend(keyword_context)
+                        
+                        if all_project_context:
+                            logger.info(f"✅ Found {len(all_project_context)} results from specific project searches")
+                            context = "\n\n".join(all_project_context[:3])  # Limit to top 3
+                            logger.info(f"📝 Context length: {len(context)} characters")
+                        else:
+                            # Fallback to original query
+                            project_context = get_category_specific_context(query, 'projects', top_k=3)
+                            if project_context:
+                                logger.info(f"✅ Found {len(project_context)} results from projects namespace")
+                                context = "\n\n".join(project_context)
+                                logger.info(f"📝 Context length: {len(context)} characters")
+                            else:
+                                # Fallback to cross-namespace search
+                                search_results = search_across_namespaces(query, top_k=5)
+                                if search_results:
+                                    logger.info(f"✅ Found {len(search_results)} results from cross-namespace search")
+                                    context_parts = []
+                                    for result in search_results[:3]:  # Top 3 results
+                                        doc_content = result['document'].page_content
+                                        category = result['category']
+                                        context_parts.append(f"[{category.upper()}] {doc_content}")
+                                    context = "\n\n".join(context_parts)
+                                    logger.info(f"📝 Context length: {len(context)} characters")
+                    else:
+                        # For specific project queries, use original logic
+                        project_context = get_category_specific_context(query, 'projects', top_k=3)
+                        if project_context:
+                            logger.info(f"✅ Found {len(project_context)} results from projects namespace")
+                            context = "\n\n".join(project_context)
+                            logger.info(f"📝 Context length: {len(context)} characters")
+                        else:
+                            # Fallback to cross-namespace search
+                            search_results = search_across_namespaces(query, top_k=5)
+                            if search_results:
+                                logger.info(f"✅ Found {len(search_results)} results from cross-namespace search")
+                                context_parts = []
+                                for result in search_results[:3]:  # Top 3 results
+                                    doc_content = result['document'].page_content
+                                    category = result['category']
+                                    context_parts.append(f"[{category.upper()}] {doc_content}")
+                                context = "\n\n".join(context_parts)
+                                logger.info(f"📝 Context length: {len(context)} characters")
+                else:
+                    # Use enhanced search across namespaces for other queries
+                    search_results = search_across_namespaces(query, top_k=5)
+                    if search_results:
+                        logger.info(f"✅ Found {len(search_results)} results from Pinecone")
+                        # Combine context from different namespaces
+                        context_parts = []
+                        for result in search_results[:3]:  # Top 3 results
+                            doc_content = result['document'].page_content
+                            category = result['category']
+                            context_parts.append(f"[{category.upper()}] {doc_content}")
+                        context = "\n\n".join(context_parts)
+                        logger.info(f"📝 Context length: {len(context)} characters")
+                    else:
+                        logger.warning("⚠️ No results from enhanced search, trying direct search")
+                        # Fallback to regular search
+                        docs = vector_store.similarity_search(query, k=3)
+                        if docs:
+                            logger.info(f"✅ Direct search found {len(docs)} results")
+                            context = "\n\n".join([doc.page_content for doc in docs])
+                        else:
+                            logger.warning("⚠️ No results from direct search either")
             except Exception as e:
-                logger.warning(f"Vector search failed: {str(e)}")
+                logger.warning(f"Enhanced vector search failed: {str(e)}")
+                # Fallback to regular search
+                try:
+                    docs = vector_store.similarity_search(query, k=3)
+                    if docs:
+                        logger.info(f"✅ Fallback search found {len(docs)} results")
+                        context = "\n\n".join([doc.page_content for doc in docs])
+                except Exception as fallback_e:
+                    logger.warning(f"Fallback vector search also failed: {str(fallback_e)}")
+        
+        # Add category-specific context based on intent if no context found
+        if not context and intent in ['career_guidance', 'ai_advice', 'cybersecurity_advice']:
+            try:
+                category_map = {
+                    'career_guidance': 'background',
+                    'ai_advice': 'ai_ml',
+                    'cybersecurity_advice': 'cybersecurity'
+                }
+                category = category_map.get(intent)
+                if category:
+                    logger.info(f"🔍 Trying category-specific search for {category}")
+                    category_context = get_category_specific_context(query, category, top_k=2)
+                    if category_context:
+                        context = "\n\n".join(category_context)
+                        logger.info(f"✅ Category-specific search found {len(category_context)} results")
+            except Exception as e:
+                logger.warning(f"Category-specific context failed: {str(e)}")
+        
         # Add contradiction context if present
         if contradiction_context:
             context = f"{contradiction_context}\n{context}" if context else contradiction_context
