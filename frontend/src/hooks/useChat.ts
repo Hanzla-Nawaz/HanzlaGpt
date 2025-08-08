@@ -4,6 +4,14 @@ import toast from 'react-hot-toast'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
+const getProviderLabel = (provider?: string) => {
+  if (provider?.includes('OpenAI')) return 'OpenAI'
+  if (provider?.includes('HuggingFace')) return 'HuggingFace'
+  if (provider?.includes('Intent-based')) return 'Fallback'
+  if (provider?.includes('Ollama')) return 'Ollama'
+  return provider || 'Unknown'
+}
+
 export const useChat = () => {
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -98,9 +106,18 @@ What would you like to know?`)
       setMessages(prev => [...prev, botMessage])
       setProvider(data.provider)
       
-      // Check if we need to fallback
-      if (data.provider !== 'OpenAI') {
-        toast.success(`Using ${data.provider} as fallback provider`)
+      // Show provider information
+      const providerName = getProviderLabel(data.provider)
+      if (data.provider?.includes('OpenAI')) {
+        toast.success(`🤖 Using OpenAI API (${data.response_time_ms}ms)`)
+      } else if (data.provider?.includes('HuggingFace')) {
+        toast.success(`🤗 Using HuggingFace API (${data.response_time_ms}ms)`)
+      } else if (data.provider?.includes('Intent-based')) {
+        toast.success(`📝 Using Intent-based fallback (${data.response_time_ms}ms)`)
+      } else if (data.provider?.includes('Ollama')) {
+        toast.success(`🦙 Using Ollama local model (${data.response_time_ms}ms)`)
+      } else {
+        toast.success(`Using ${providerName} (${data.response_time_ms}ms)`)
       }
 
     } catch (error) {

@@ -41,6 +41,28 @@ const Message: React.FC<MessageProps> = ({ message }) => {
     }
   }
 
+  const getProviderIcon = (provider?: string) => {
+    if (provider?.includes('OpenAI')) return '🤖'
+    if (provider?.includes('Groq')) return '⚡'
+    if (provider?.includes('Together AI')) return '🤝'
+    if (provider?.includes('Replicate')) return '🔄'
+    if (provider?.includes('HuggingFace')) return '🤗'
+    if (provider?.includes('Intent-based')) return '📝'
+    if (provider?.includes('Ollama')) return '🦙'
+    return '❓'
+  }
+
+  const getProviderLabel = (provider?: string) => {
+    if (provider?.includes('OpenAI')) return 'OpenAI'
+    if (provider?.includes('Groq')) return 'Groq'
+    if (provider?.includes('Together AI')) return 'Together AI'
+    if (provider?.includes('Replicate')) return 'Replicate'
+    if (provider?.includes('HuggingFace')) return 'HuggingFace'
+    if (provider?.includes('Intent-based')) return 'Fallback'
+    if (provider?.includes('Ollama')) return 'Ollama'
+    return provider || 'Unknown'
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -96,9 +118,25 @@ const Message: React.FC<MessageProps> = ({ message }) => {
                 </span>
               )}
               
-              {message.provider && message.provider !== 'OpenAI' && (
-                <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">
-                  {message.provider}
+              {message.provider && (
+                <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                  message.provider.includes('OpenAI') 
+                    ? 'bg-green-100 text-green-800' 
+                    : message.provider.includes('Groq')
+                    ? 'bg-yellow-100 text-yellow-800'
+                    : message.provider.includes('Together AI')
+                    ? 'bg-indigo-100 text-indigo-800'
+                    : message.provider.includes('Replicate')
+                    ? 'bg-pink-100 text-pink-800'
+                    : message.provider.includes('HuggingFace')
+                    ? 'bg-blue-100 text-blue-800'
+                    : message.provider.includes('Intent-based')
+                    ? 'bg-purple-100 text-purple-800'
+                    : message.provider.includes('Ollama')
+                    ? 'bg-orange-100 text-orange-800'
+                    : 'bg-gray-100 text-gray-800'
+                }`}>
+                  {getProviderIcon(message.provider)} {getProviderLabel(message.provider)}
                 </span>
               )}
             </div>

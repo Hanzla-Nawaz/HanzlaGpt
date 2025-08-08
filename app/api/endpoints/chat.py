@@ -11,6 +11,7 @@ from app.schemas.schema import QueryRequest, QueryResponse, ChatHistoryResponse,
 from app.core.database import log_chat, get_chat_history
 from app.core.vectorstore import create_vector_store
 from app.core.llm_providers import provider_manager
+from app.core.provider_router import provider_router
 from app.templates.prompts import (
     INTENT_ROUTING_PROMPT, RAG_PROMPT, CAREER_PROMPT,
     AI_PROMPT, CYBER_PROMPT, PERSONAL_PROMPT, SYSTEM_PROMPT, GREETING_MESSAGE
@@ -24,11 +25,23 @@ _llm = None
 _vector_store = None
 _chains = None
 
-def get_llm():
-    """Get LLM instance with fallback."""
+def get_llm(user_id: str = None, session_id: str = None):
+    """Get LLM instance for specific user with automatic provider assignment."""
     global _llm
-    # Always get the current provider to allow for fallback
-    _llm = provider_manager.get_chat_model()
+    
+    # Force re-initialization to detect environment changes
+    provider_manager.reinitialize_providers()
+    
+    # If user_id is provided, use provider router
+    if user_id:
+        _llm = provider_router.get_chat_model_for_user(user_id, session_id)
+        if _llm is None:
+            # Fallback to default provider
+            _llm = provider_manager.get_chat_model()
+    else:
+        # Use default provider manager
+        _llm = provider_manager.get_chat_model()
+    
     if _llm is None:
         logger.error("No LLM provider available")
         raise HTTPException(status_code=503, detail="LLM service unavailable")
@@ -48,7 +61,7 @@ def get_chains():
     llm = get_llm()
     if llm is None:
         raise HTTPException(status_code=503, detail="LLM service unavailable")
-    
+        
     _chains = {
         'intent': INTENT_ROUTING_PROMPT | llm,
         'rag': RAG_PROMPT | llm,
@@ -120,6 +133,15 @@ def fallback_intent_detection(query: str) -> Dict[str, Any]:
     """Simple keyword-based intent detection as fallback."""
     query_lower = query.lower()
     
+    # Handle basic greetings and introductions
+    greeting_keywords = ['hi', 'hello', 'hey', 'good morning', 'good afternoon', 'good evening']
+    name_keywords = ['what is your name', 'who are you', 'introduce yourself', 'tell me about yourself', 'your name']
+    
+    if any(keyword in query_lower for keyword in greeting_keywords):
+        return {"intent": "personal_info", "confidence": 0.9}
+    elif any(keyword in query_lower for keyword in name_keywords):
+        return {"intent": "personal_info", "confidence": 0.9}
+    
     # Define keywords for each intent - focused on Hanzala's personal information
     career_keywords = ['career', 'job', 'work', 'employment', 'professional', 'resume', 'cv', 'experience', 'skill', 'development', 'bs', 'degree', 'university', 'college', 'education']
     ai_keywords = ['ai', 'artificial intelligence', 'machine learning', 'ml', 'deep learning', 'neural network', 'tensorflow', 'pytorch', 'data science', 'python', 'programming']
@@ -142,6 +164,10 @@ def get_response_by_intent(query: str, intent: str, vector_store=None, user_id=N
     """Get response based on intent with fallback."""
     try:
         chains = get_chains()
+        if not chains:
+            # No LLM available, use intent-based responses
+            return get_intent_based_response(query, intent, user_id, session_id)
+        
         # Map intent to chain
         intent_map = {
             'career_guidance': 'career',
@@ -260,7 +286,51 @@ def get_response_by_intent(query: str, intent: str, vector_store=None, user_id=N
                     return str(fallback_response)
         except Exception as fallback_error:
             logger.error(f"Fallback also failed: {str(fallback_error)}")
-        return "I apologize, but I'm experiencing technical difficulties. Please try again later."
+        # Final fallback to intent-based responses
+        return get_intent_based_response(query, intent, user_id, session_id)
+
+def get_intent_based_response(query: str, intent: str, user_id=None, session_id=None) -> str:
+    """Generate response based on intent when no LLM is available."""
+    query_lower = query.lower()
+    
+    if intent == "user_info":
+        return "I understand you're sharing information about yourself. I'm Hanzala Nawaz, an AI Engineer and Cybersecurity Analyst. How can I help you today?"
+    
+    elif intent == "user_last_question":
+        # Get chat history for context
+        try:
+            history = get_chat_history(user_id or "default", session_id or "default", limit=5)
+            if history:
+                last_query = history[0].get('query', 'your previous question')
+                return f"Your last question was: '{last_query}'. How can I help you further?"
+            else:
+                return "I don't have access to your previous questions at the moment. How can I help you?"
+        except:
+            return "I don't have access to your previous questions at the moment. How can I help you?"
+    
+    elif intent == "career_guidance":
+        return "I'm Hanzala Nawaz, an AI Engineer and Cybersecurity Analyst. I can help you with career guidance in AI, ML, cybersecurity, and software development. What specific area would you like to discuss?"
+    
+    elif intent == "ai_advice":
+        return "I specialize in AI and Machine Learning. I've worked on projects like CyberShield, GenEval, and Skin Cancer Predictor. What would you like to know about AI or my experience?"
+    
+    elif intent == "cybersecurity_advice":
+        return "I have extensive experience in cybersecurity, including penetration testing, security analysis, and developing security tools. What cybersecurity topic would you like to discuss?"
+    
+    elif intent == "personal_info":
+        # Handle different types of personal info requests
+        if any(word in query_lower for word in ['hi', 'hello', 'hey']):
+            return "Hello! I'm Hanzala Nawaz, an AI Engineer and Cybersecurity Analyst. I'm here to help you with your career journey in technology. What would you like to know about AI, cybersecurity, or my experience?"
+        elif any(word in query_lower for word in ['name', 'who are you', 'introduce']):
+            return "I'm Hanzala Nawaz, an AI Engineer and Cybersecurity Analyst. I've worked with companies like Omdena, Al Nafi Cloud, BCG X, and PwC on projects like CyberShield, GenEval, and Skin Cancer Predictor. I'm passionate about AI, cybersecurity, and helping others grow in tech. How can I assist you today?"
+        else:
+            return "I'm Hanzala Nawaz, an AI Engineer and Cybersecurity Analyst. I've worked with companies like Omdena, Al Nafi Cloud, BCG X, and PwC. I can share my experience and help guide your career path. What would you like to know?"
+    
+    elif intent == "general_rag":
+        return "I have knowledge about various topics including AI, cybersecurity, career development, and my personal experience. What specific information are you looking for?"
+    
+    else:
+        return "Hello! I'm Hanzala Nawaz, an AI Engineer and Cybersecurity Analyst. I'm here to help you with career guidance, technical questions, or share my experience. What would you like to know?"
 
 @chat_router.post("/query", response_model=QueryResponse)
 async def query_chat(request: QueryRequest):
@@ -268,8 +338,8 @@ async def query_chat(request: QueryRequest):
     start_time = time.time()
     log_warning = None
     try:
-        # Get LLM and vector store
-        llm = get_llm()
+        # Get LLM and vector store for specific user
+        llm = get_llm(request.user_id, request.session_id)
         vector_store = None
         try:
             vector_store = get_vector_store()
@@ -296,13 +366,24 @@ async def query_chat(request: QueryRequest):
         except Exception as e:
             logger.error(f"Failed to log chat: {str(e)}")
             log_warning = "Warning: Your message was not saved to chat history due to a server/database error."
+        # Get user-specific provider information
+        user_provider = provider_router.get_provider_for_user(request.user_id, request.session_id)
+        provider_info = f"{user_provider}"
+        
+        # Check if we're using intent-based fallback (no LLM available)
+        if user_provider == "Intent-based fallback":
+            provider_info = "Intent-based fallback"
+        # Add fallback indicator if using intent-based response
+        elif "I have knowledge about various topics" in response or "Hello! I'm Hanzala Nawaz" in response:
+            provider_info = f"{user_provider} (Intent-based fallback)"
+        
         return QueryResponse(
             response=response if not log_warning else f"{response}\n\n{log_warning}",
             intent=intent,
             confidence=confidence,
             response_time_ms=response_time_ms,
             sources=[],  # TODO: Add source tracking
-            provider=provider_manager.current_chat_provider.get_name() if provider_manager.current_chat_provider else None
+            provider=provider_info
         )
     except HTTPException:
         raise
@@ -324,10 +405,18 @@ async def query_chat(request: QueryRequest):
 @chat_router.get("/greeting")
 async def get_greeting():
     """Get the initial greeting message."""
+    # Force re-initialization to get accurate provider status
+    provider_manager.reinitialize_providers()
+    current_provider = provider_manager.current_chat_provider.get_name() if provider_manager.current_chat_provider else "None"
+    
+    # Check if we're using intent-based fallback
+    if not provider_manager.current_chat_provider or not provider_manager.current_chat_provider.is_available():
+        current_provider = "Intent-based fallback"
+    
     return {
         "message": GREETING_MESSAGE,
         "timestamp": time.time(),
-        "provider": provider_manager.current_chat_provider.get_name() if provider_manager.current_chat_provider else "None"
+        "provider": current_provider
     }
 
 @chat_router.get("/history/{user_id}/{session_id}", response_model=ChatHistoryResponse)
@@ -358,6 +447,87 @@ async def get_chat_history_endpoint(
             total_count=0,
             session_id=session_id
         )
+
+@chat_router.get("/provider-status")
+async def get_provider_status():
+    """Get current provider status."""
+    try:
+        # Force re-initialization to get current status
+        provider_manager.reinitialize_providers()
+        provider_status = provider_manager.get_provider_status()
+        
+        # Get accurate current provider
+        current_chat_provider = provider_status.get("chat_provider", "None")
+        if current_chat_provider == "None" or not provider_manager.current_chat_provider or not provider_manager.current_chat_provider.is_available():
+            current_chat_provider = "Intent-based fallback"
+        
+        return {
+            "current_chat_provider": current_chat_provider,
+            "current_embedding_provider": provider_status.get("embedding_provider", "None"),
+            "all_providers": provider_status.get("providers", {}),
+            "environment_vars": {
+                "OPENAI_API_KEY": "Set" if os.getenv('OPENAI_API_KEY') else "Not set",
+                "HUGGINGFACEHUB_API_TOKEN": "Set" if os.getenv('HUGGINGFACEHUB_API_TOKEN') else "Not set",
+                "GROQ_API_KEY": "Set" if os.getenv('GROQ_API_KEY') else "Not set",
+                "TOGETHER_API_KEY": "Set" if os.getenv('TOGETHER_API_KEY') else "Not set",
+                "REPLICATE_API_TOKEN": "Set" if os.getenv('REPLICATE_API_TOKEN') else "Not set"
+            },
+            "timestamp": time.time()
+        }
+    except Exception as e:
+        logger.error(f"Failed to get provider status: {str(e)}")
+        return {
+            "error": "Failed to get provider status",
+            "timestamp": time.time()
+        }
+
+@chat_router.post("/provider-reload")
+async def reload_providers():
+    """Manually trigger provider re-initialization."""
+    try:
+        provider_manager.reinitialize_providers()
+        return {
+            "message": "Providers reloaded successfully",
+            "timestamp": time.time()
+        }
+    except Exception as e:
+        logger.error(f"Failed to reload providers: {str(e)}")
+        return {
+            "error": "Failed to reload providers",
+            "timestamp": time.time()
+        }
+
+@chat_router.get("/provider-stats")
+async def get_provider_stats():
+    """Get provider usage statistics and distribution."""
+    try:
+        stats = provider_router.get_provider_stats()
+        return {
+            "stats": stats,
+            "timestamp": time.time()
+        }
+    except Exception as e:
+        logger.error(f"Failed to get provider stats: {str(e)}")
+        return {
+            "error": "Failed to get provider stats",
+            "timestamp": time.time()
+        }
+
+@chat_router.post("/force-provider")
+async def force_provider_for_user(user_id: str, provider_name: str, session_id: str = None):
+    """Force a specific provider for a user (for testing)."""
+    try:
+        provider_router.force_provider_for_user(user_id, provider_name, session_id)
+        return {
+            "message": f"Forced provider {provider_name} for user {user_id}",
+            "timestamp": time.time()
+        }
+    except Exception as e:
+        logger.error(f"Failed to force provider: {str(e)}")
+        return {
+            "error": "Failed to force provider",
+            "timestamp": time.time()
+        }
 
 @chat_router.get("/health", response_model=HealthCheckResponse)
 async def health_check():
