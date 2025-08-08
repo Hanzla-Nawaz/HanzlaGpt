@@ -1,9 +1,39 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, validator
+from typing import Optional, List, Dict, Any
+from datetime import datetime
 
 class QueryRequest(BaseModel):
-    user_id: str
-    session_id: str
-    query: str
+    user_id: str = Field(..., min_length=1, max_length=255, description="Unique user identifier")
+    session_id: str = Field(..., min_length=1, max_length=255, description="Session identifier")
+    query: str = Field(..., min_length=1, max_length=2000, description="User's question or request")
+    
+    @validator('query')
+    def validate_query(cls, v):
+        if not v.strip():
+            raise ValueError('Query cannot be empty or whitespace only')
+        return v.strip()
 
 class QueryResponse(BaseModel):
-    response: str
+    response: str = Field(..., description="AI assistant's response")
+    intent: Optional[str] = Field(None, description="Detected intent of the query")
+    confidence: Optional[float] = Field(None, ge=0.0, le=1.0, description="Confidence score of the response")
+    response_time_ms: Optional[int] = Field(None, description="Response time in milliseconds")
+    sources: Optional[List[Dict[str, Any]]] = Field(None, description="Sources used for the response")
+    provider: Optional[str] = Field(None, description="Active provider used to generate the response")
+
+class ChatHistoryResponse(BaseModel):
+    messages: List[Dict[str, Any]] = Field(..., description="Chat history messages")
+    total_count: int = Field(..., description="Total number of messages")
+    session_id: str = Field(..., description="Session identifier")
+
+class HealthCheckResponse(BaseModel):
+    status: str = Field(..., description="Service status")
+    timestamp: datetime = Field(..., description="Current timestamp")
+    version: str = Field(..., description="API version")
+    components: Dict[str, str] = Field(..., description="Component statuses")
+    providers: Dict[str, Any] = Field(..., description="Provider statuses")
+
+class ErrorResponse(BaseModel):
+    error: str = Field(..., description="Error message")
+    detail: Optional[str] = Field(None, description="Detailed error information")
+    timestamp: datetime = Field(default_factory=datetime.now, description="Error timestamp")
