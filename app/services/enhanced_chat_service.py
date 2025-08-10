@@ -27,6 +27,7 @@ from app.templates.enhanced_prompts import (
 import os
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
+from app.core.database import get_chat_history
 
 class IntentType(Enum):
     """Enum for different intent types."""
@@ -138,9 +139,20 @@ class EnhancedChatService:
             confidence = intent_result.get("confidence", 0.5)
             # Step 2: Context Retrieval
             context_chunks = await self._retrieve_context_async(query, intent)
+            # Fetch recent chat history for context (excluding current query)
+            chat_history = get_chat_history(user_id, session_id, limit=5)
+            # Format as a numbered conversation transcript
+            history_text = ""
+            for idx, entry in enumerate(reversed(chat_history), 1):  # oldest first
+                history_text += f"{idx}. User: {entry['query']}\n   Bot: {entry['answer']}\n"
             # Step 3: Response Generation
             response = await self._generate_response_async(
-                query, intent, context_chunks, user_id, session_id
+                query=query,
+                intent=intent,
+                context_chunks=context_chunks,
+                user_id=user_id,
+                session_id=session_id,
+                history_text=history_text
             )
             # Step 4: Provider Information
             provider = self._get_provider_info(user_id, session_id)
@@ -306,9 +318,10 @@ class EnhancedChatService:
         intent: IntentType, 
         context_chunks: List[str], 
         user_id: str, 
-        session_id: str
+        session_id: str,
+        history_text: str = ""
     ) -> str:
-        """Generate response asynchronously with intent-specific prompts."""
+        """Generate response asynchronously with intent-specific prompts and chat history."""
         try:
             # Get LLM
             llm = self._get_llm_for_user()
@@ -328,13 +341,19 @@ class EnhancedChatService:
             
             # Prepare context
             context = "\n\n".join(context_chunks) if context_chunks else ""
+            # Inject chat history into the prompt input
+            prompt_input = {
+                "query": query,
+                "context": context,
+                "history": history_text
+            }
             
             # Create chain
             chain = prompt | llm
             
             # Execute with timeout
             result = await asyncio.wait_for(
-                asyncio.to_thread(chain.invoke, {"query": query, "context": context}),
+                asyncio.to_thread(chain.invoke, prompt_input),
                 timeout=self.timeout_seconds
             )
             

@@ -11,6 +11,10 @@ from loguru import logger
 import sys
 from typing import List
 from contextlib import asynccontextmanager
+from app.core.database import get_all_chat_history
+from fastapi import APIRouter
+
+debug_router = APIRouter()
 
 # Configure logging
 logger.remove()
@@ -93,6 +97,12 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 
 # Include API router
 app.include_router(api_router, prefix="/api")
+
+@debug_router.get("/debug/chat-history", tags=["Debug"])
+async def debug_chat_history():
+    return get_all_chat_history()
+
+app.include_router(debug_router, prefix="/api")
 
 @app.get("/", tags=["Root"])
 async def root() -> dict:
