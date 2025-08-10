@@ -50,7 +50,7 @@ def get_self_query_retriever(k: int = 8) -> SelfQueryRetriever:
     return SelfQueryRetriever.from_llm(
         llm,
         vector_store,
-        document_content_description="Hanzala knowledge chunks",
+        document_contents="Hanzala knowledge chunks",
         metadata_field_info=METADATA_SCHEMA,
         structured_query_translator=PineconeTranslator(),
         search_kwargs={"k": k},

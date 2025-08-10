@@ -22,6 +22,10 @@ async def enhanced_query_chat(
             session_id=request.session_id,
             use_cache=True
         )
+        # If rate limit or error, return JSONResponse directly
+        from fastapi.responses import JSONResponse
+        if isinstance(chat_response, JSONResponse):
+            return chat_response
         response_time_ms = int((time.time() - start_time) * 1000)
         return QueryResponse(
             response=chat_response.response,

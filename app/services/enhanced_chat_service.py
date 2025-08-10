@@ -28,6 +28,7 @@ import os
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from app.core.database import get_chat_history
+import tiktoken
 
 class IntentType(Enum):
     """Enum for different intent types."""
@@ -139,20 +140,44 @@ class EnhancedChatService:
             confidence = intent_result.get("confidence", 0.5)
             # Step 2: Context Retrieval
             context_chunks = await self._retrieve_context_async(query, intent)
-            # Fetch recent chat history for context (excluding current query)
-            chat_history = get_chat_history(user_id, session_id, limit=5)
-            # Format as a numbered conversation transcript
-            history_text = ""
-            for idx, entry in enumerate(reversed(chat_history), 1):  # oldest first
-                history_text += f"{idx}. User: {entry['query']}\n   Bot: {entry['answer']}\n"
+            # Re-rank context chunks by semantic similarity
+            try:
+                from app.core.llm_providers import provider_manager
+                embeddings = provider_manager.get_embeddings()
+                if embeddings:
+                    query_emb = embeddings.embed_query(query)
+                    chunk_scores = []
+                    for chunk in context_chunks:
+                        chunk_emb = embeddings.embed_query(chunk)
+                        score = self._cosine_similarity(query_emb, chunk_emb)
+                        chunk_scores.append((chunk, score))
+                    # Sort by similarity (descending)
+                    chunk_scores.sort(key=lambda x: -x[1])
+                    context_chunks = [c for c, s in chunk_scores]
+            except Exception as e:
+                logger.warning(f"Could not re-rank context chunks by similarity: {e}")
+            # Token-based context limiting (as before)
+            token_budget = 1200
+            model_name = "gpt-4o-mini"  # Or fetch from settings if dynamic
+            selected_chunks = []
+            total_tokens = 0
+            for chunk in context_chunks:
+                chunk_tokens = self._count_tokens(chunk, model=model_name)
+                if total_tokens + chunk_tokens > token_budget:
+                    break
+                selected_chunks.append(chunk)
+                total_tokens += chunk_tokens
+            if not selected_chunks:
+                # fallback to at least one chunk if available
+                selected_chunks = context_chunks[:1]
+            context_chunks = selected_chunks    
             # Step 3: Response Generation
             response = await self._generate_response_async(
                 query=query,
                 intent=intent,
                 context_chunks=context_chunks,
                 user_id=user_id,
-                session_id=session_id,
-                history_text=history_text
+                session_id=session_id
             )
             # Step 4: Provider Information
             provider = self._get_provider_info(user_id, session_id)
@@ -318,16 +343,14 @@ class EnhancedChatService:
         intent: IntentType, 
         context_chunks: List[str], 
         user_id: str, 
-        session_id: str,
-        history_text: str = ""
+        session_id: str
     ) -> str:
-        """Generate response asynchronously with intent-specific prompts and chat history."""
+        """Generate response asynchronously with intent-specific prompts."""
         try:
             # Get LLM
             llm = self._get_llm_for_user()
             if not llm:
                 return self._get_fallback_response(intent, query)
-            
             # Select appropriate prompt based on intent
             prompt_mapping = {
                 IntentType.CAREER_GUIDANCE: CAREER_PROMPT,
@@ -336,27 +359,22 @@ class EnhancedChatService:
                 IntentType.PERSONAL_INFO: PERSONAL_PROMPT,
                 IntentType.GENERAL_RAG: RAG_PROMPT
             }
-            
             prompt = prompt_mapping.get(intent, SYSTEM_PROMPT)
-            
             # Prepare context
             context = "\n\n".join(context_chunks) if context_chunks else ""
-            # Inject chat history into the prompt input
             prompt_input = {
                 "query": query,
-                "context": context,
-                "history": history_text
+                "context": context
             }
-            
+            # Log prompt size for diagnostics
+            logger.info(f"Prompt size (chars): {len(str(prompt_input))}")
             # Create chain
             chain = prompt | llm
-            
             # Execute with timeout
             result = await asyncio.wait_for(
                 asyncio.to_thread(chain.invoke, prompt_input),
                 timeout=self.timeout_seconds
             )
-            
             # Extract response
             if hasattr(result, 'content'):
                 response = result.content
@@ -364,10 +382,8 @@ class EnhancedChatService:
                 response = result
             else:
                 response = str(result)
-            
             logger.info(f"Generated response for intent: {intent.value}")
             return response
-            
         except asyncio.TimeoutError:
             logger.error("Response generation timeout")
             return self._get_fallback_response(intent, query)
@@ -445,6 +461,20 @@ class EnhancedChatService:
             "cache_hits": None,  # Not tracked in in-memory version
             "cache_misses": None
         } 
+
+    def _count_tokens(self, text: str, model: str = "gpt-3.5-turbo") -> int:
+        try:
+            enc = tiktoken.encoding_for_model(model)
+            return len(enc.encode(text))
+        except Exception:
+            # Fallback: rough estimate
+            return len(text.split())
+
+    def _cosine_similarity(self, vec1, vec2):
+        import numpy as np
+        vec1 = np.array(vec1)
+        vec2 = np.array(vec2)
+        return float(np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2) + 1e-8))
 
 def add_debug_endpoint(router: APIRouter, chat_service: EnhancedChatService):
     if os.getenv("ENABLE_DEBUG_ENDPOINTS", "false").lower() == "true":
