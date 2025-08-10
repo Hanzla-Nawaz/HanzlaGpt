@@ -10,6 +10,7 @@ interface MessageProps {
 
 const Message: React.FC<MessageProps> = ({ message }) => {
   const isUser = message.type === 'user'
+  const isBot = message.type === 'bot'
   
   const getIntentColor = (intent?: string) => {
     switch (intent) {
@@ -49,17 +50,25 @@ const Message: React.FC<MessageProps> = ({ message }) => {
     >
       <div className={`flex items-start space-x-3 max-w-3xl ${isUser ? 'flex-row-reverse space-x-reverse' : ''}`}>
         {/* Avatar */}
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-          isUser 
-            ? 'bg-gradient-to-r from-primary-600 to-secondary-600' 
-            : 'bg-gradient-to-r from-gray-600 to-gray-700'
-        }`}>
-          {isUser ? (
-            <User className="w-4 h-4 text-white" />
-          ) : (
-            <Bot className="w-4 h-4 text-white" />
-          )}
-        </div>
+        {isBot ? (
+          <img
+            src="/hanzla.jpg"
+            alt="Hanzla Nawaz"
+            className="rounded-full w-10 h-10 object-cover border border-gray-300"
+          />
+        ) : (
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+            isUser 
+              ? 'bg-gradient-to-r from-primary-600 to-secondary-600' 
+              : 'bg-gradient-to-r from-gray-600 to-gray-700'
+          }`}>
+            {isUser ? (
+              <User className="w-4 h-4 text-white" />
+            ) : (
+              <Bot className="w-4 h-4 text-white" />
+            )}
+          </div>
+        )}
 
         {/* Message Content */}
         <div className={`message-bubble ${isUser ? 'message-user' : 'message-bot'}`}>
