@@ -19,5 +19,8 @@ loguru
 requests
 python-docx
 tqdm
+passlib[bcrypt]
+pyjwt
+sendgrid
 # Optional: for Ollama
 ollama

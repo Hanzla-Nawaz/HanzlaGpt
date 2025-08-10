@@ -4,10 +4,9 @@ import { motion } from 'framer-motion'
 
 interface GreetingMessageProps {
   message: string
-  provider?: string | null
 }
 
-const GreetingMessage: React.FC<GreetingMessageProps> = ({ message, provider }) => {
+const GreetingMessage: React.FC<GreetingMessageProps> = ({ message }) => {
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}

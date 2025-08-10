@@ -39,3 +39,25 @@ class ErrorResponse(BaseModel):
     error: str = Field(..., description="Error message")
     detail: Optional[str] = Field(None, description="Detailed error information")
     timestamp: datetime = Field(default_factory=datetime.now, description="Error timestamp")
+
+class SignupRequest(BaseModel):
+    email: str
+    password: str
+
+class SignupResponse(BaseModel):
+    message: str
+
+class EmailVerificationRequest(BaseModel):
+    token: str
+
+class EmailVerificationResponse(BaseModel):
+    message: str
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    message: str = "Login successful"

@@ -4,14 +4,6 @@ import toast from 'react-hot-toast'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
-const getProviderLabel = (provider?: string) => {
-  if (provider?.includes('OpenAI')) return 'OpenAI'
-  if (provider?.includes('HuggingFace')) return 'HuggingFace'
-  if (provider?.includes('Intent-based')) return 'Fallback'
-  if (provider?.includes('Ollama')) return 'Ollama'
-  return provider || 'Unknown'
-}
-
 export const useChat = () => {
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)

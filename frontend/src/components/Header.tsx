@@ -1,5 +1,5 @@
 import React from 'react'
-import { Bot, Zap, Shield, Code, Brain } from 'lucide-react'
+import { Zap, Shield, Code, Brain } from 'lucide-react'
 
 const Header: React.FC = () => {
   return (

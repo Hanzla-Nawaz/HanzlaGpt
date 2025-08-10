@@ -105,6 +105,17 @@ def create_tables():
                         updated_at TIMESTAMP DEFAULT NOW()
                     );
                 """)
+                # Users table
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS users (
+                        id SERIAL PRIMARY KEY,
+                        email VARCHAR(255) UNIQUE NOT NULL,
+                        hashed_password VARCHAR(255) NOT NULL,
+                        is_verified BOOLEAN DEFAULT FALSE,
+                        verification_token VARCHAR(255),
+                        created_at TIMESTAMP DEFAULT NOW()
+                    );
+                """)
                 # Create indexes for better performance
                 cur.execute("""
                     CREATE INDEX IF NOT EXISTS idx_chat_history_user_session 
@@ -194,3 +205,62 @@ def set_user_provider(user_id: str, provider: str):
                 )
     except Exception as e:
         logger.error(f"Failed to set provider mapping: {e}")
+
+def create_user(email: str, hashed_password: str, verification_token: str):
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO users (email, hashed_password, verification_token)
+                    VALUES (%s, %s, %s)
+                    RETURNING id;
+                    """,
+                    (email, hashed_password, verification_token)
+                )
+                return cur.fetchone()[0]
+    except Exception as e:
+        logger.error(f"Failed to create user: {e}")
+        raise
+
+def get_user_by_email(email: str):
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    "SELECT * FROM users WHERE email = %s;",
+                    (email,)
+                )
+                return cur.fetchone()
+    except Exception as e:
+        logger.error(f"Failed to get user by email: {e}")
+        return None
+
+def verify_user_email(token: str):
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE users SET is_verified = TRUE, verification_token = NULL
+                    WHERE verification_token = %s RETURNING id;
+                    """,
+                    (token,)
+                )
+                return cur.fetchone()
+    except Exception as e:
+        logger.error(f"Failed to verify user email: {e}")
+        return None
+
+def authenticate_user(email: str, hashed_password: str):
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor(cursor_factory=RealDictCursor) as cur:
+                cur.execute(
+                    "SELECT * FROM users WHERE email = %s AND hashed_password = %s AND is_verified = TRUE;",
+                    (email, hashed_password)
+                )
+                return cur.fetchone()
+    except Exception as e:
+        logger.error(f"Failed to authenticate user: {e}")
+        return None

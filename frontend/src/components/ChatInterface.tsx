@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { Send, Loader2, Bot, User, Sparkles } from 'lucide-react'
+import { Send, Loader2, Bot, Sparkles } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import toast from 'react-hot-toast'
 import Message from './Message'
@@ -13,7 +13,6 @@ const ChatInterface: React.FC = () => {
     isLoading,
     sendMessage,
     greeting,
-    provider,
     isConnected
   } = useChat()
 
@@ -77,7 +76,6 @@ const ChatInterface: React.FC = () => {
         {/* Provider Status Bar */}
         <div className="px-6 py-2 bg-gray-50 border-b border-gray-100">
           <ProviderStatus 
-            provider={provider || undefined}
             responseTime={messages.length > 0 ? messages[messages.length - 1]?.responseTime : undefined}
             isConnected={isConnected}
           />
@@ -92,7 +90,7 @@ const ChatInterface: React.FC = () => {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -20 }}
               >
-                <GreetingMessage message={greeting} provider={provider} />
+                <GreetingMessage message={greeting} />
               </motion.div>
             )}
             
