@@ -26,6 +26,7 @@ from app.templates.enhanced_prompts import (
 )
 import os
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 
 class IntentType(Enum):
     """Enum for different intent types."""
@@ -76,6 +77,9 @@ class EnhancedChatService:
         self.timeout_seconds = 30
         self.max_context_length = 4000
         self.cache = {}  # Simple in-memory cache
+        self.user_query_counts = {}
+        self.max_queries_per_user = 3
+        # NOTE: For production/distributed deployments, replace this with a persistent store (e.g., Redis) for rate limiting.
     
     def _cache_key(self, user_id: str, session_id: str, query: str) -> str:
         """
@@ -109,6 +113,20 @@ class EnhancedChatService:
         """
         start_time = time.time()
         try:
+            # Use user_id if available, else session_id
+            user_key = user_id or session_id or 'anonymous'
+            count = self.user_query_counts.get(user_key, 0)
+            if count >= self.max_queries_per_user:
+                # Return a user-friendly error JSON for frontend display
+                return JSONResponse(
+                    status_code=429,
+                    content={
+                        "error": "Query limit reached",
+                        "detail": f"You have reached the maximum of {self.max_queries_per_user} free queries. Please contact the site owner for more access."
+                    }
+                )
+            self.user_query_counts[user_key] = count + 1
+
             cache_key = self._cache_key(user_id, session_id, query)
             if use_cache and cache_key in self.cache:
                 cached_response = self.cache[cache_key]

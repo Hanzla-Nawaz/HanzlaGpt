@@ -79,6 +79,19 @@ What would you like to know?`)
         }),
       })
 
+      if (response.status === 429) {
+        const data = await response.json()
+        toast.error(data.detail || 'Query limit reached.')
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          content: data.detail || 'You have reached the maximum number of free queries.',
+          type: 'bot',
+          timestamp: new Date(),
+        }
+        setMessages(prev => [...prev, errorMessage])
+        return
+      }
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
