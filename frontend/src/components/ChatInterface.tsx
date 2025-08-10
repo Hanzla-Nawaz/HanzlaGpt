@@ -17,39 +17,6 @@ const ChatInterface: React.FC = () => {
     isConnected
   } = useChat()
 
-  const getProviderIcon = (provider?: string) => {
-    if (provider?.includes('OpenAI')) return '🤖'
-    if (provider?.includes('Groq')) return '⚡'
-    if (provider?.includes('Together AI')) return '🤝'
-    if (provider?.includes('Replicate')) return '🔄'
-    if (provider?.includes('HuggingFace')) return '🤗'
-    if (provider?.includes('Intent-based')) return '📝'
-    if (provider?.includes('Ollama')) return '🦙'
-    return '❓'
-  }
-
-  const getProviderLabel = (provider?: string) => {
-    if (provider?.includes('OpenAI')) return 'OpenAI'
-    if (provider?.includes('Groq')) return 'Groq'
-    if (provider?.includes('Together AI')) return 'Together AI'
-    if (provider?.includes('Replicate')) return 'Replicate'
-    if (provider?.includes('HuggingFace')) return 'HuggingFace'
-    if (provider?.includes('Intent-based')) return 'Fallback'
-    if (provider?.includes('Ollama')) return 'Ollama'
-    return provider || 'Unknown'
-  }
-
-  const getProviderDescription = (provider?: string) => {
-    if (provider?.includes('OpenAI')) return 'Premium AI Service'
-    if (provider?.includes('Groq')) return 'Ultra-Fast AI (1000/day free)'
-    if (provider?.includes('Together AI')) return 'Reliable AI (1000/day free)'
-    if (provider?.includes('Replicate')) return 'High-Quality AI (500/day free)'
-    if (provider?.includes('HuggingFace')) return 'Open-Source AI (30K/month free)'
-    if (provider?.includes('Intent-based')) return 'Local Fallback (No API needed)'
-    if (provider?.includes('Ollama')) return 'Local AI (Unlimited)'
-    return 'AI Service'
-  }
-
   const [inputValue, setInputValue] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -98,27 +65,6 @@ const ChatInterface: React.FC = () => {
                 <span className="text-sm text-gray-500">
                   {isConnected ? 'Connected' : 'Disconnected'}
                 </span>
-                {provider && (
-                  <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                    provider.includes('OpenAI') 
-                      ? 'bg-green-100 text-green-800' 
-                      : provider.includes('Groq')
-                      ? 'bg-yellow-100 text-yellow-800'
-                      : provider.includes('Together AI')
-                      ? 'bg-indigo-100 text-indigo-800'
-                      : provider.includes('Replicate')
-                      ? 'bg-pink-100 text-pink-800'
-                      : provider.includes('HuggingFace')
-                      ? 'bg-blue-100 text-blue-800'
-                      : provider.includes('Intent-based')
-                      ? 'bg-purple-100 text-purple-800'
-                      : provider.includes('Ollama')
-                      ? 'bg-orange-100 text-orange-800'
-                      : 'bg-gray-100 text-gray-800'
-                  }`}>
-                    {getProviderIcon(provider)} {getProviderLabel(provider)}
-                  </span>
-                )}
               </div>
             </div>
           </div>

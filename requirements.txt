@@ -19,10 +19,5 @@ loguru
 requests
 python-docx
 tqdm
-# Free alternatives
-huggingface-hub
-sentence-transformers
-transformers
-torch
 # Optional: for Ollama
 ollama

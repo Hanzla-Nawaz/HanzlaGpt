@@ -97,6 +97,14 @@ def create_tables():
                         UNIQUE(user_id, doc_type, file_name)
                     );
                 """)
+                # Provider mapping table
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS provider_mapping (
+                        user_id VARCHAR(255) PRIMARY KEY,
+                        provider VARCHAR(50) NOT NULL,
+                        updated_at TIMESTAMP DEFAULT NOW()
+                    );
+                """)
                 # Create indexes for better performance
                 cur.execute("""
                     CREATE INDEX IF NOT EXISTS idx_chat_history_user_session 
@@ -159,3 +167,30 @@ def get_chat_history(user_id: str, session_id: str, limit: int = 50) -> list:
     except Exception as e:
         logger.error(f"Failed to get chat history: {str(e)}")
         return []
+
+def get_user_provider(user_id: str) -> str | None:
+    """Return stored provider name for user, or None."""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT provider FROM provider_mapping WHERE user_id=%s;", (user_id,))
+                row = cur.fetchone()
+                return row[0] if row else None
+    except Exception as e:
+        logger.error(f"Failed to get provider mapping: {e}")
+        return None
+
+
+def set_user_provider(user_id: str, provider: str):
+    """Upsert provider mapping for a user."""
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """INSERT INTO provider_mapping (user_id, provider, updated_at)
+                    VALUES (%s, %s, NOW())
+                    ON CONFLICT (user_id) DO UPDATE SET provider = EXCLUDED.provider, updated_at = NOW();""",
+                    (user_id, provider),
+                )
+    except Exception as e:
+        logger.error(f"Failed to set provider mapping: {e}")

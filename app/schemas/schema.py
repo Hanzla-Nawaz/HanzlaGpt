@@ -3,9 +3,11 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 class QueryRequest(BaseModel):
-    user_id: str = Field(..., min_length=1, max_length=255, description="Unique user identifier")
-    session_id: str = Field(..., min_length=1, max_length=255, description="Session identifier")
-    query: str = Field(..., min_length=1, max_length=2000, description="User's question or request")
+    query: str
+    user_id: Optional[str] = None
+    session_id: Optional[str] = None
+    provider: Optional[str] = None  # e.g., openai, groq, together, hf
+    stream: bool = False
     
     @validator('query')
     def validate_query(cls, v):
@@ -18,7 +20,7 @@ class QueryResponse(BaseModel):
     intent: Optional[str] = Field(None, description="Detected intent of the query")
     confidence: Optional[float] = Field(None, ge=0.0, le=1.0, description="Confidence score of the response")
     response_time_ms: Optional[int] = Field(None, description="Response time in milliseconds")
-    sources: Optional[List[Dict[str, Any]]] = Field(None, description="Sources used for the response")
+    sources: Optional[List[Any]] = Field(None, description="Sources used for the response")
     provider: Optional[str] = Field(None, description="Active provider used to generate the response")
 
 class ChatHistoryResponse(BaseModel):

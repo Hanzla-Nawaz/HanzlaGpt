@@ -1,0 +1,63 @@
+Product Requirements Document (PRD)
+Product Name: HanzlaGPT
+Type: AI-powered Chatbot with Retrieval-Augmented Generation (RAG)
+Tech Stack: FastAPI, LangChain, Pinecone, PostgreSQL, Multiple LLM Providers
+1. Purpose
+HanzlaGPT is an AI-powered assistant designed to provide intelligent, context-aware responses to user queries. It leverages Retrieval-Augmented Generation (RAG) to combine the power of large language models (LLMs) with a vector database for enhanced information retrieval and accuracy. The system is intended for personal productivity, knowledge management, and as a demonstration of modern AI backend architecture.
+2. Core Features
+Conversational AI:
+Users can interact with HanzlaGPT via a chat interface, receiving contextually relevant answers.
+Retrieval-Augmented Generation (RAG):
+The system retrieves relevant context from a vector database (Pinecone) and augments LLM responses with this information.
+Multi-Provider LLM Support:
+Supports multiple LLM providers (OpenAI, HuggingFace, Groq, Together, Replicate, Ollama) with automatic fallback and provider assignment.
+User Session Management:
+Tracks user sessions and chat history for personalized experiences.
+Provider Routing:
+Automatically assigns and rotates LLM providers to balance load and optimize cost/performance.
+Health & Metrics Endpoints:
+Provides endpoints for system health, provider status, and usage metrics.
+Admin/Debug Endpoints:
+Includes endpoints for cache management, provider forcing, and debugging (protected in production).
+Security:
+CORS, Trusted Host, and (optionally) Basic Auth for API protection.
+3. Non-Functional Requirements
+Performance:
+Fast response times, efficient context retrieval, and scalable provider management.
+Reliability:
+Robust error handling, provider fallback, and health checks.
+Maintainability:
+Modular codebase, clear separation of concerns, and comprehensive logging.
+Extensibility:
+Easy to add new LLM providers, retrievers, or chat features.
+Security:
+Secure handling of API keys, environment variables, and user data.
+4. API Endpoints (Sample)
+POST /api/chat/query — Main chat endpoint (RAG-powered)
+POST /api/chat/stream — Streaming chat responses
+GET /api/chat/history/{user_id}/{session_id} — Retrieve chat history
+GET /api/chat/health — Health check
+GET /api/chat/provider-status — Provider status
+POST /api/chat/cache/clear — Clear chat cache
+POST /api/chat/force-provider — Force provider for a user (admin/debug)
+GET /api/chat/metrics — Usage metrics
+5. Authentication
+Supports Basic Auth (username/password) for protected endpoints (optional, can be enabled for testing).
+6. Data Storage
+Vector Database: Pinecone (for context retrieval)
+Relational Database: PostgreSQL (for chat history, provider mapping)
+In-Memory Cache: For chat responses and provider assignments (no Redis required)
+7. Testing & Quality
+Automated API testing (e.g., with Testsprite)
+Health and metrics endpoints for monitoring
+Error logging and fallback mechanisms
+8. Deployment
+Backend: Deployable to free-tier Python hosts (Railway, Render, Fly.io, etc.)
+Frontend: Deployable to Vercel or similar
+No Redis or paid services required for core functionality
+9. Future Enhancements
+Add user authentication and authorization
+Integrate more advanced analytics and reporting
+Support for additional data sources and document uploads
+You can copy and save this PRD as a Markdown or PDF file and upload it to Testsprite or any other tool that requires a product specification.
+If you want this as a downloadable Markdown file, let me know!

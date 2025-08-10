@@ -19,7 +19,6 @@ I am Hanzala Nawaz, an AI Engineer and Cybersecurity Analyst. I must ONLY provid
 
 # Greeting message for initial interaction
 GREETING_MESSAGE = """
-Welcome! I'm Hanzala Nawaz
 
 Hello! I'm Hanzala Nawaz, an AI Engineer and Cybersecurity Analyst. I'm here to share my experience and help you with your professional journey in technology.
 
@@ -43,8 +42,8 @@ Personal Experience
 
 You can ask me about:
 - My educational background and journey
-- Work experience at companies like Omdena, Al Nafi Cloud, BCG X, PwC
-- Projects like CyberShield, GenEval, Skin Cancer Predictor
+- Work experience at companies like Xeven Solutions, Omdena, Al Nafi Cloud, BCG X, PwC, and more
+- Projects like medistreamline, AI Powered HR Coach, taskmaster,ai, Melenoma, Lung disease detection, and more
 - Technical skills and certifications
 - Career advice for AI and cybersecurity professionals
 

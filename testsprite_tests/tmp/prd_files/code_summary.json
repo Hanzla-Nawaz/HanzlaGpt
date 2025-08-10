@@ -1,0 +1,153 @@
+{
+  "tech_stack": [
+    "Python",
+    "FastAPI",
+    "LangChain",
+    "Pinecone",
+    "PostgreSQL",
+    "Pydantic",
+    "Loguru",
+    "Uvicorn"
+  ],
+  "features": [
+    {
+      "name": "Chat API",
+      "description": "Main chat endpoint for RAG-powered conversational AI. Accepts user queries and returns contextually relevant responses.",
+      "files": ["app/api/endpoints/enhanced_chat.py", "app/services/enhanced_chat_service.py"],
+      "api_doc": {
+        "paths": {
+          "/api/chat/query": {
+            "post": {
+              "summary": "Enhanced chat query endpoint",
+              "description": "Process a chat query using RAG and LLMs.",
+              "requestBody": {
+                "content": {
+                  "application/json": {
+                    "schema": {"$ref": "#/components/schemas/QueryRequest"}
+                  }
+                }
+              },
+              "responses": {
+                "200": {
+                  "description": "Successful response",
+                  "content": {
+                    "application/json": {
+                      "schema": {"$ref": "#/components/schemas/QueryResponse"}
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "/api/chat/stream": {
+            "post": {
+              "summary": "Stream chat response",
+              "description": "Stream chat response token-by-token.",
+              "requestBody": {
+                "content": {
+                  "application/json": {
+                    "schema": {"$ref": "#/components/schemas/QueryRequest"}
+                  }
+                }
+              },
+              "responses": {
+                "200": {
+                  "description": "Streaming response",
+                  "content": {
+                    "text/plain": {}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "components": {
+          "schemas": {
+            "QueryRequest": {
+              "type": "object",
+              "properties": {
+                "query": {"type": "string"},
+                "user_id": {"type": "string"},
+                "session_id": {"type": "string"}
+              },
+              "required": ["query", "user_id", "session_id"]
+            },
+            "QueryResponse": {
+              "type": "object",
+              "properties": {
+                "response": {"type": "string"},
+                "intent": {"type": "string"},
+                "confidence": {"type": "number"},
+                "response_time_ms": {"type": "integer"},
+                "sources": {"type": "array", "items": {"type": "string"}},
+                "provider": {"type": "string"},
+                "context_used": {"type": "boolean"},
+                "error": {"type": "string"}
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Chat History API",
+      "description": "Retrieve chat history for a user session.",
+      "files": ["app/api/endpoints/enhanced_chat.py", "app/core/database.py"],
+      "api_doc": {
+        "paths": {
+          "/api/chat/history/{user_id}/{session_id}": {
+            "get": {
+              "summary": "Get chat history",
+              "description": "Retrieve chat history for a user and session.",
+              "parameters": [
+                {"name": "user_id", "in": "path", "required": true, "schema": {"type": "string"}},
+                {"name": "session_id", "in": "path", "required": true, "schema": {"type": "string"}},
+                {"name": "limit", "in": "query", "required": false, "schema": {"type": "integer", "default": 50}}
+              ],
+              "responses": {
+                "200": {
+                  "description": "Successful response",
+                  "content": {
+                    "application/json": {
+                      "schema": {"type": "object"}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "Health & Metrics APIs",
+      "description": "System health, provider status, and metrics endpoints.",
+      "files": ["app/api/endpoints/enhanced_chat.py", "app/core/llm_providers.py", "app/core/provider_router.py"],
+      "api_doc": {
+        "paths": {
+          "/api/chat/health": {
+            "get": {
+              "summary": "Health check",
+              "description": "Check system health.",
+              "responses": {"200": {"description": "Healthy"}}
+            }
+          },
+          "/api/chat/provider-status": {
+            "get": {
+              "summary": "Provider status",
+              "description": "Get current provider status.",
+              "responses": {"200": {"description": "Status"}}
+            }
+          },
+          "/api/chat/metrics": {
+            "get": {
+              "summary": "Chat metrics",
+              "description": "Get chat usage metrics.",
+              "responses": {"200": {"description": "Metrics"}}
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -7,6 +7,7 @@ export interface Message {
   confidence?: number
   responseTime?: number
   provider?: string
+  sources?: string[]
 }
 
 export interface ChatResponse {
@@ -15,6 +16,7 @@ export interface ChatResponse {
   confidence: number
   response_time_ms: number
   provider: string
+  sources?: string[]
 }
 
 export interface GreetingResponse {

@@ -9,6 +9,8 @@ import uvicorn
 import time
 from loguru import logger
 import sys
+from typing import List
+from contextlib import asynccontextmanager
 
 # Configure logging
 logger.remove()
@@ -25,27 +27,18 @@ logger.add(
     level="DEBUG"
 )
 
-from contextlib import asynccontextmanager
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan manager."""
-    # Startup
     logger.info("Starting HanzlaGPT application...")
     try:
-        # Initialize database tables
         create_tables()
         logger.info("Database tables initialized successfully")
     except Exception as e:
         logger.error(f"Failed to initialize database: {str(e)}")
         raise
-    
     yield
-    
-    # Shutdown
     logger.info("Shutting down HanzlaGPT application...")
 
-# Create FastAPI app
 app = FastAPI(
     title="HanzlaGPT",
     description="Personal AI assistant using FastAPI, LangChain, and Pinecone",
@@ -55,7 +48,15 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-allowed_origins = ["http://localhost:3000", "http://localhost:3001"]
+# CORS setup for frontend integration
+allowed_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000"
+]
+allowed_hosts: List[str] = [h.strip() for h in settings.ALLOWED_HOSTS.split(",") if h.strip()]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
@@ -64,19 +65,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+if allowed_hosts and allowed_hosts != ["*"]:
+    app.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=allowed_hosts
+    )
 
-# Request timing middleware
 @app.middleware("http")
-async def add_process_time_header(request: Request, call_next):
+async def add_process_time_header(request: Request, call_next) -> JSONResponse:
     start_time = time.time()
     response = await call_next(request)
     process_time = time.time() - start_time
     response.headers["X-Process-Time"] = str(process_time)
     return response
 
-# Global exception handler
 @app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
+async def global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     logger.error(f"Unhandled exception: {str(exc)}")
     return JSONResponse(
         status_code=500,
@@ -88,32 +92,16 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
 # Include API router
-app.include_router(api_router, prefix="/api", tags=["API"])
+app.include_router(api_router, prefix="/api")
 
 @app.get("/", tags=["Root"])
-async def root():
-    """
-    Root endpoint to check if the API is running.
-    """
+async def root() -> dict:
     return {
         "message": "Welcome to HanzlaGPT API",
         "version": "1.0.0",
         "status": "running",
         "docs": "/docs"
     }
-
-@app.get("/health", tags=["Health"])
-async def health_check():
-    """
-    Health check endpoint.
-    """
-    return {
-        "status": "healthy",
-        "timestamp": time.time(),
-        "version": "1.0.0"
-    }
-
-
 
 if __name__ == "__main__":
     logger.info("Starting HanzlaGPT server...")

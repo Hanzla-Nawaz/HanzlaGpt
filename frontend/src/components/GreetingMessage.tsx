@@ -22,14 +22,9 @@ const GreetingMessage: React.FC<GreetingMessageProps> = ({ message, provider }) 
         <div className="flex-1">
           <div className="flex items-center space-x-2 mb-3">
             <h3 className="text-lg font-semibold text-primary-700">
-              Welcome to HanzlaGPT!
+              Welcome to InsightAI!
             </h3>
             <Sparkles className="w-5 h-5 text-secondary-500" />
-            {provider && (
-              <span className="text-xs bg-primary-100 text-primary-700 px-2 py-1 rounded-full">
-                {provider}
-              </span>
-            )}
           </div>
           
           <div className="prose prose-sm max-w-none text-gray-700">

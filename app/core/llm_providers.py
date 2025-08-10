@@ -5,37 +5,53 @@ from abc import ABC, abstractmethod
 from loguru import logger
 from app.core.config import settings
 
-# OpenAI imports
+# OpenAI imports – prefer new `langchain_openai`, fall back to legacy community classes
 try:
-    from openai import OpenAI
-    from langchain_community.chat_models import ChatOpenAI
-    from langchain_community.embeddings import OpenAIEmbeddings
+    from langchain_openai import ChatOpenAI, OpenAIEmbeddings  # ≥ LangChain 0.0.10
     OPENAI_AVAILABLE = True
 except ImportError:
-    OPENAI_AVAILABLE = False
-    logger.warning("OpenAI not available")
+    try:
+        from langchain_community.chat_models import ChatOpenAI  # Deprecated path
+        from langchain_community.embeddings import OpenAIEmbeddings
+        OPENAI_AVAILABLE = True
+        logger.warning("Using legacy langchain_community OpenAI classes; consider `pip install -U langchain-openai`.")
+    except ImportError as e:
+        OPENAI_AVAILABLE = False
+        logger.warning(f"OpenAI provider not available: {e}")
 
-# HuggingFace imports
+# HuggingFace imports – prefer new `langchain_huggingface` package
 try:
-    from langchain_community.llms import HuggingFaceHub
-    from langchain_community.embeddings import HuggingFaceEmbeddings
+    from langchain_huggingface import HuggingFaceEndpoint as HFChatCls, HuggingFaceEmbeddings as HFEmbedCls
     HUGGINGFACE_AVAILABLE = True
-except ImportError as e:
-    HUGGINGFACE_AVAILABLE = False
-    logger.warning(f"HuggingFace not available: {e}")
+except ImportError:
+    try:
+        from langchain_community.llms import HuggingFaceHub as HFChatCls
+        from langchain_community.embeddings import HuggingFaceEmbeddings as HFEmbedCls
+        HUGGINGFACE_AVAILABLE = True
+        logger.warning("Using legacy langchain_community HuggingFace classes; consider `pip install -U langchain-huggingface`.")
+    except ImportError as e:
+        HUGGINGFACE_AVAILABLE = False
+        HFChatCls = HFEmbedCls = None  # type: ignore
+        logger.warning(f"HuggingFace not available: {e}")
 
-# Ollama imports
+# Ollama imports – prefer new `langchain_ollama`
 try:
-    from langchain_community.llms import Ollama
-    from langchain_community.embeddings import OllamaEmbeddings
+    from langchain_ollama import OllamaLLM as OllamaChatCls, OllamaEmbeddings as OllamaEmbCls
     OLLAMA_AVAILABLE = True
-except ImportError as e:
-    OLLAMA_AVAILABLE = False
-    logger.warning(f"Ollama not available: {e}")
+except ImportError:
+    try:
+        from langchain_community.llms import Ollama as OllamaChatCls
+        from langchain_community.embeddings import OllamaEmbeddings as OllamaEmbCls
+        OLLAMA_AVAILABLE = True
+        logger.warning("Using legacy langchain_community Ollama classes; install `langchain-ollama` for latest.")
+    except ImportError as e:
+        OLLAMA_AVAILABLE = False
+        OllamaChatCls = OllamaEmbCls = None  # type: ignore
+        logger.warning(f"Ollama not available: {e}")
 
 # Groq imports (Free tier: 1000 requests/day)
 try:
-    from langchain_community.chat_models import ChatGroq
+    from langchain_groq import ChatGroq
     GROQ_AVAILABLE = True
 except ImportError as e:
     GROQ_AVAILABLE = False
@@ -43,7 +59,7 @@ except ImportError as e:
 
 # Together AI imports (Free tier: 1000 requests/day)
 try:
-    from langchain_community.chat_models import ChatTogetherAI
+    from langchain_together import ChatTogetherAI
     TOGETHER_AVAILABLE = True
 except ImportError as e:
     TOGETHER_AVAILABLE = False
@@ -226,61 +242,6 @@ class ReplicateProvider(BaseLLMProvider):
     def get_name(self) -> str:
         return "Replicate"
 
-class HuggingFaceProvider(BaseLLMProvider):
-    """HuggingFace provider using free models."""
-    
-    def __init__(self):
-        # Try both env var names - HF library expects HUGGINGFACEHUB_API_TOKEN
-        self.api_key = os.getenv('HUGGINGFACEHUB_API_TOKEN') or os.getenv('HUGGINGFACE_API_KEY')
-        # Use a better model for chat
-        self.chat_model_name = "microsoft/DialoGPT-large"  # Better alternative
-        self.embedding_model_name = "sentence-transformers/all-MiniLM-L6-v2"  # Free embedding model
-        logger.info(f"HuggingFace provider initialized with API key: {'Set' if self.api_key else 'Not set'}")
-        if self.api_key:
-            logger.info(f"✅ HuggingFace API key found: {self.api_key[:10]}...")
-        else:
-            logger.warning("❌ HuggingFace API key not found")
-    
-    def get_chat_model(self):
-        if not HUGGINGFACE_AVAILABLE:
-            logger.warning("HuggingFace not available - imports failed")
-            return None
-        if not self.api_key:
-            logger.warning("HuggingFace API key not set")
-            return None
-        try:
-            logger.info(f"Initializing HuggingFace model: {self.chat_model_name}")
-            model = HuggingFaceHub(
-                repo_id=self.chat_model_name,
-                huggingfacehub_api_token=self.api_key,
-                model_kwargs={"temperature": 0.7}
-            )
-            logger.info("✅ HuggingFace chat model initialized successfully")
-            return model
-        except Exception as e:
-            logger.warning(f"HuggingFace chat model not available: {str(e)}")
-            return None
-    
-    def get_embeddings(self):
-        if not HUGGINGFACE_AVAILABLE:
-            return None
-        try:
-            return HuggingFaceEmbeddings(
-                model_name=self.embedding_model_name,
-                model_kwargs={'device': 'cpu'}  # Use CPU for deployment
-            )
-        except Exception as e:
-            logger.warning(f"HuggingFace embeddings not available: {str(e)}")
-            return None
-    
-    def is_available(self) -> bool:
-        # Re-check environment variables directly from os.environ
-        self.api_key = os.getenv('HUGGINGFACEHUB_API_TOKEN', '') or os.getenv('HUGGINGFACE_API_KEY', '')
-        return HUGGINGFACE_AVAILABLE and bool(self.api_key)
-    
-    def get_name(self) -> str:
-        return "HuggingFace"
-
 class OllamaProvider(BaseLLMProvider):
     """Ollama provider for local models."""
     
@@ -292,7 +253,7 @@ class OllamaProvider(BaseLLMProvider):
         if not OLLAMA_AVAILABLE:
             return None
         try:
-            return Ollama(
+            return OllamaChatCls(
                 base_url=self.base_url,
                 model=self.model_name,
                 temperature=0.7
@@ -305,7 +266,7 @@ class OllamaProvider(BaseLLMProvider):
         if not OLLAMA_AVAILABLE:
             return None
         try:
-            return OllamaEmbeddings(
+            return OllamaEmbCls(
                 base_url=self.base_url,
                 model=self.model_name
             )
@@ -323,7 +284,7 @@ class LocalEmbeddingsProvider(BaseLLMProvider):
     """Local embeddings using sentence-transformers."""
     
     def __init__(self):
-        self.model_name = "sentence-transformers/all-MiniLM-L6-v2"
+        self.model_name = "BAAI/bge-large-en-v1.5"  # 1536-dim embedding model
     
     def get_chat_model(self):
         # Local chat models are complex, so we'll use a simple fallback
@@ -360,25 +321,41 @@ class LocalEmbeddingsProvider(BaseLLMProvider):
 
 class LLMProviderManager:
     """Manages multiple LLM providers with fallback strategy."""
-    
     def __init__(self):
+        self.openai_provider = OpenAIProvider()
+        self.groq_provider = GroqProvider()
+        self.togetherai_provider = TogetherAIProvider()
+        self.replicate_provider = ReplicateProvider()
+        # Only OpenAI is used for embeddings
         self.providers = [
-            OpenAIProvider(),
-            GroqProvider(),
-            TogetherAIProvider(),
-            ReplicateProvider(),
-            HuggingFaceProvider(),
-            OllamaProvider(),
-            LocalEmbeddingsProvider()
+            self.openai_provider,
+            self.groq_provider,
+            self.togetherai_provider,
+            self.replicate_provider
         ]
         self.current_chat_provider = None
         self.current_embedding_provider = None
         self._initialize_providers()
-    
+
+    def get_embeddings(self):
+        if self.openai_provider.is_available():
+            return self.openai_provider.get_embeddings()
+        logger.error("No valid embedding provider available! Please check your OpenAI API key.")
+        return None
+
+    def refresh_providers(self):
+        # Only OpenAI is used for embeddings
+        self.providers = [
+            self.openai_provider,
+            self.groq_provider,
+            self.togetherai_provider,
+            self.replicate_provider
+        ]
+        if not self.openai_provider.is_available():
+            logger.error("No LLM providers are available! Please check your OpenAI API key.")
+
     def _initialize_providers(self):
-        """Initialize and test providers in order of preference."""
         logger.info("Initializing LLM providers...")
-        
         # Initialize chat model - try each provider until one works
         for provider in self.providers:
             if provider.is_available():
@@ -386,69 +363,80 @@ class LLMProviderManager:
                     chat_model = provider.get_chat_model()
                     if chat_model:
                         self.current_chat_provider = provider
-                        logger.info(f"✅ Chat model initialized with {provider.get_name()}")
+                        logger.info(f"Chat model initialized with {provider.get_name()}")
                         break
                     else:
-                        logger.warning(f"❌ {provider.get_name()} returned None model")
+                        logger.warning(f"{provider.get_name()} returned None model")
                 except Exception as e:
-                    logger.warning(f"❌ {provider.get_name()} failed: {e}")
+                    logger.warning(f"{provider.get_name()} failed: {e}")
             else:
-                logger.warning(f"❌ {provider.get_name()} not available")
-        
-        # Initialize embeddings
-        for provider in self.providers:
-            if provider.is_available():
-                try:
-                    embeddings = provider.get_embeddings()
-                    if embeddings:
-                        self.current_embedding_provider = provider
-                        logger.info(f"✅ Embeddings initialized with {provider.get_name()}")
-                        break
-                except Exception as e:
-                    logger.warning(f"❌ {provider.get_name()} embeddings failed: {e}")
-        
+                logger.warning(f"{provider.get_name()} not available")
+        # Initialize embeddings (OpenAI only)
+        if self.openai_provider.is_available():
+            try:
+                embeddings = self.openai_provider.get_embeddings()
+                if embeddings:
+                    self.current_embedding_provider = self.openai_provider
+                    logger.info(f"Embeddings initialized with {self.openai_provider.get_name()}")
+            except Exception as e:
+                logger.warning(f"{self.openai_provider.get_name()} embeddings failed: {e}")
         if not self.current_chat_provider:
-            logger.error("❌ No chat model available!")
+            logger.error("No chat model available!")
         if not self.current_embedding_provider:
-            logger.error("❌ No embeddings model available!")
-    
+            logger.error("No embeddings model available!")
+
     def get_chat_model(self):
-        """Get the current chat model with automatic fallback."""
-        if self.current_chat_provider:
+        self.refresh_providers()
+        # Always check if the current provider is still available
+        if not self.current_chat_provider or not self.current_chat_provider.is_available():
+            self.current_chat_provider = None
+            # Pick the first available provider
+            for provider in self.providers:
+                if provider.is_available():
+                    self.current_chat_provider = provider
+                    logger.info(f"[LLM] Switched to provider: {provider.get_name()}")
+                    break
+        if self.current_chat_provider and self.current_chat_provider.is_available():
             try:
                 model = self.current_chat_provider.get_chat_model()
                 if model:
                     return model
                 else:
-                    # Model returned None, try fallback
                     logger.warning(f"Current chat provider {self.current_chat_provider.get_name()} returned None, trying fallback")
+                    self.current_chat_provider = None
                     if self.fallback_to_next_provider("chat"):
-                        return self.get_chat_model()  # Recursive call with new provider
+                        return self.get_chat_model()
             except Exception as e:
                 logger.warning(f"Current chat provider {self.current_chat_provider.get_name()} failed: {e}")
-                # Force fallback on error
+                self.current_chat_provider = None
                 if self.fallback_to_next_provider("chat"):
-                    return self.get_chat_model()  # Recursive call with new provider
-        
-        # If no current provider or fallback failed, try to initialize any available provider
+                    return self.get_chat_model()
         for provider in self.providers:
             if provider.is_available():
                 try:
                     model = provider.get_chat_model()
                     if model:
                         self.current_chat_provider = provider
-                        logger.info(f"🔄 Emergency fallback to {provider.get_name()} for chat")
+                        logger.info(f"Emergency fallback to {provider.get_name()} for chat")
                         return model
                 except Exception as e:
                     logger.warning(f"Provider {provider.get_name()} failed: {e}")
+                    self.current_chat_provider = None
                     continue
-        
+        self.current_chat_provider = None
         return None
     
     def get_embeddings(self):
-        """Get the current embeddings model."""
-        if self.current_embedding_provider:
+        self.refresh_providers()
+        if self.current_embedding_provider and self.current_embedding_provider.is_available():
             return self.current_embedding_provider.get_embeddings()
+        for provider in self.providers:
+            if provider.is_available():
+                embeddings = provider.get_embeddings()
+                if embeddings:
+                    self.current_embedding_provider = provider
+                    logger.info(f"Emergency fallback to {provider.get_name()} for embeddings")
+                    return embeddings
         return None
     
     def get_provider_status(self) -> Dict[str, Any]:
@@ -472,8 +460,6 @@ class LLMProviderManager:
         """Fallback to next available provider."""
         current_provider = self.current_chat_provider if provider_type == "chat" else self.current_embedding_provider
         current_index = next((i for i, p in enumerate(self.providers) if p == current_provider), -1)
-        
-        # Try next providers
         for i in range(current_index + 1, len(self.providers)):
             provider = self.providers[i]
             if provider.is_available():
@@ -481,34 +467,52 @@ class LLMProviderManager:
                     chat_model = provider.get_chat_model()
                     if chat_model:
                         self.current_chat_provider = provider
-                        logger.info(f"🔄 Fallback to {provider.get_name()} for chat")
+                        logger.info(f"Fallback to {provider.get_name()} for chat")
                         return True
                 else:
                     embeddings = provider.get_embeddings()
                     if embeddings:
                         self.current_embedding_provider = provider
-                        logger.info(f"🔄 Fallback to {provider.get_name()} for embeddings")
+                        logger.info(f"Fallback to {provider.get_name()} for embeddings")
                         return True
-        
-        logger.error(f"❌ No fallback available for {provider_type}")
+        logger.error(f"No fallback available for {provider_type}")
         return False
 
     def reinitialize_providers(self):
         """Force re-initialization of providers to detect environment changes."""
-        logger.info("🔄 Re-initializing providers to detect environment changes...")
+        logger.info("Re-initializing providers to detect environment changes...")
         
         # Reload environment variables from .env file
         try:
             from dotenv import load_dotenv
             load_dotenv(override=True)
-            logger.info("✅ Environment variables reloaded from .env file")
+            logger.info("Environment variables reloaded from .env file")
         except Exception as e:
             logger.warning(f"Failed to reload .env file: {e}")
         
         self.current_chat_provider = None
         self.current_embedding_provider = None
         self._initialize_providers()
-        logger.info("✅ Provider re-initialization complete")
+        logger.info("Provider re-initialization complete")
+
+    # NEW helper
+    def get_chat_model_by_name(self, name: str):
+        for provider in self.providers:
+            if provider.get_name().lower() == name.lower():
+                return provider.get_chat_model()
+        return None
+
+    def get_provider_name(self):
+        self.refresh_providers()
+        if not self.current_chat_provider or not self.current_chat_provider.is_available():
+            self.current_chat_provider = None
+            for provider in self.providers:
+                if provider.is_available():
+                    self.current_chat_provider = provider
+                    break
+        if self.current_chat_provider and self.current_chat_provider.is_available():
+            return self.current_chat_provider.get_name()
+        return "Intent-based fallback"
 
 # Global provider manager instance
 provider_manager = LLMProviderManager()

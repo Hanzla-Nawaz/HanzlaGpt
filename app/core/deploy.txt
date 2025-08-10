@@ -1,0 +1,21 @@
+How to Set Up
+Frontend: Deploy to Vercel as usual.
+Backend:
+Push your FastAPI code to GitHub.
+Create a new project on Railway/Render/Fly, connect your repo, and deploy.
+Set environment variables (REDIS_URL, PG_*, etc.) in the backend host’s dashboard.
+Redis:
+Sign up at Upstash, create a free Redis database, and copy the REDIS_URL.
+Paste this URL into your backend’s environment variables.
+Postgres:
+Sign up at Supabase or Neon, create a free database, and copy the connection string.
+Paste this into your backend’s environment variables.
+Why Not Vercel for Backend?
+Vercel’s serverless functions are not suitable for FastAPI with background tasks, persistent connections, or stateful services.
+Free hosts like Railway/Render/Fly are designed for this and have generous free tiers.
+Summary
+You can use only free services!
+Use Vercel for frontend, Railway/Render/Fly for backend, Upstash for Redis, and Supabase/Neon for Postgres.
+All these services have free tiers and are easy to set up.
+Would you like a step-by-step guide for deploying your FastAPI backend to Railway, Render, or Fly.io?
+Let me know your preferred backend host, and I’ll walk you through it!

@@ -7,6 +7,7 @@ import time
 from typing import Dict, List, Optional
 from loguru import logger
 from app.core.llm_providers import provider_manager
+from app.core.database import get_user_provider, set_user_provider
 
 class ProviderRouter:
     """Routes users to different providers automatically."""
@@ -24,6 +25,7 @@ class ProviderRouter:
         self.provider_usage: Dict[str, int] = {name: 0 for name in self.provider_names}
         self.last_rotation = time.time()
         self.rotation_interval = 3600  # Rotate every hour
+        self._counter = 0  # for simple round-robin fallback
     
     def _hash_user_id(self, user_id: str) -> int:
         """Create a hash of user ID for consistent provider assignment."""
@@ -64,47 +66,47 @@ class ProviderRouter:
         if current_time - self.last_rotation > self.rotation_interval:
             self._rotate_providers()
             self.last_rotation = current_time
-        
         # Create a unique identifier for the user
         user_key = f"{user_id}_{session_id}" if session_id else user_id
-        
         # Check cache first
         if user_key in self.user_provider_cache:
             cached_provider = self.user_provider_cache[user_key]
-            # Verify the cached provider is still available
             if cached_provider in self._get_available_providers():
                 return cached_provider
-        
         # Get available providers
         available_providers = self._get_available_providers()
         if not available_providers:
             logger.warning("No providers available, using fallback")
             return "Intent-based fallback"
-        
         # Use consistent hashing to assign provider
         user_hash = self._hash_user_id(user_key)
         provider_index = user_hash % len(available_providers)
         selected_provider = available_providers[provider_index]
-        
         # Cache the assignment
         self.user_provider_cache[user_key] = selected_provider
-        
         # Update usage stats
         self.provider_usage[selected_provider] = self.provider_usage.get(selected_provider, 0) + 1
-        
         logger.info(f"Assigned provider {selected_provider} to user {user_id}")
         return selected_provider
     
-    def get_chat_model_for_user(self, user_id: str, session_id: str = None):
-        """Get chat model for specific user."""
-        provider_name = self.get_provider_for_user(user_id, session_id)
-        if provider_name == "Intent-based fallback":
-            return None  # Will use fallback logic
-        
-        provider = self._get_provider_by_name(provider_name)
-        if provider:
-            return provider.get_chat_model()
-        return None
+    def get_chat_model_for_user(self, user_id: str, session_id: str = None, requested: str | None = None):
+        """Return chat model honouring a requested provider or persisted mapping."""
+        # Requested provider overrides & persists
+        if requested:
+            set_user_provider(user_id, requested)
+            self.user_provider_cache[user_id] = requested
+            return provider_manager.get_chat_model_by_name(requested)
+        # Check in-memory cache
+        if user_id in self.user_provider_cache:
+            provider_name = self.user_provider_cache[user_id]
+        else:
+            # Check DB
+            provider_name = get_user_provider(user_id)
+            if not provider_name:
+                provider_name = self._assign_next_provider()
+                set_user_provider(user_id, provider_name)
+            self.user_provider_cache[user_id] = provider_name
+        return provider_manager.get_chat_model_by_name(provider_name)
     
     def get_embeddings_for_user(self, user_id: str, session_id: str = None):
         """Get embeddings for specific user."""
@@ -164,6 +166,13 @@ class ProviderRouter:
         if user_key in self.user_provider_cache:
             del self.user_provider_cache[user_key]
             logger.info(f"Cleared provider cache for user {user_id}")
+
+    def _assign_next_provider(self) -> str:
+        """Round-robin pick next provider from preferred list."""
+        name = self.provider_names[self._counter % len(self.provider_names)]
+        self._counter += 1
+        logger.info(f"Assigned provider {name} via round-robin")
+        return name
 
 # Global provider router instance
 provider_router = ProviderRouter()

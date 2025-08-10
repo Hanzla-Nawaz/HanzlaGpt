@@ -1,4 +1,10 @@
-import os
+import os, sys, pathlib
+
+# Ensure project root is on sys.path when running this file directly
+PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 import tempfile
 import logging
 from uuid import uuid4
@@ -22,30 +28,32 @@ class EnhancedDataLoader:
         )
         
     def load_text_files(self, directory: str) -> List[Document]:
-        """Load all text files from a directory."""
-        documents = []
+        """Recursively load all .txt / .md files under a directory tree."""
+        documents: List[Document] = []
         if not os.path.exists(directory):
             logger.warning(f"Directory {directory} does not exist")
             return documents
-            
-        for filename in os.listdir(directory):
-            if filename.endswith(('.txt', '.md')):
-                file_path = os.path.join(directory, filename)
-                try:
-                    loader = TextLoader(file_path, encoding='utf-8')
-                    docs = loader.load()
-                    # Add metadata to identify source
-                    for doc in docs:
-                        doc.metadata.update({
-                            'source': filename,
-                            'type': 'text',
-                            'category': self._categorize_file(filename)
-                        })
-                    documents.extend(docs)
-                    logger.info(f"Loaded {filename} with {len(docs)} documents")
-                except Exception as e:
-                    logger.error(f"Error loading {filename}: {str(e)}")
-                    
+
+        from pathlib import Path
+        txt_md_paths = list(Path(directory).rglob("*.txt")) + list(Path(directory).rglob("*.md"))
+
+        for path in txt_md_paths:
+            try:
+                loader = TextLoader(str(path), encoding="utf-8")
+                docs = loader.load()
+                for doc in docs:
+                    doc.metadata.update(
+                        {
+                            "source": str(path.relative_to(directory)),
+                            "type": "text",
+                            "category": self._categorize_file(path.name),
+                        }
+                    )
+                documents.extend(docs)
+                logger.info(f"Loaded {path.name} with {len(docs)} documents")
+            except Exception as e:
+                logger.error(f"Error loading {path}: {e}")
+
         return documents
     
     def _categorize_file(self, filename: str) -> str:
@@ -111,11 +119,18 @@ class EnhancedDataLoader:
             
             # Add namespace-specific metadata
             for chunk in chunks:
-                chunk.metadata.update({
-                    'namespace': category,
-                    'chunk_id': str(uuid4()),
-                    'original_source': doc.metadata.get('source', 'unknown')
-                })
+                import hashlib
+                deterministic_id = hashlib.sha1(
+                    (chunk.page_content).encode("utf-8")
+                ).hexdigest()
+                chunk.metadata.update(
+                    {
+                        "namespace": category,
+                        "chunk_id": deterministic_id,
+                        "original_source": doc.metadata.get("source", "unknown"),
+                        "text": chunk.page_content,
+                    }
+                )
             
             if category not in namespaced_chunks:
                 namespaced_chunks[category] = []
@@ -153,11 +168,13 @@ class EnhancedDataLoader:
                 logger.error("Failed to create vector store")
                 return False
             
-            # Clear existing data if requested
+            # Clear existing data if requested (index has already been wiped via dashboard)
+            # Kept here for future runs
             if clear_existing:
-                logger.info("Clearing existing vectors from Pinecone...")
-                # Note: This would require implementing a clear method or using Pinecone directly
-                # For now, we'll proceed with adding new vectors
+                from app.core.vectorstore import clear_namespace
+                for ns in namespaced_chunks.keys():
+                    clear_namespace(ns)
+                logger.info("✅ Cleared namespaces before upload")
             
             total_uploaded = 0
             

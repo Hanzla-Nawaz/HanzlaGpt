@@ -1,0 +1,30 @@
+{
+  "product_name": "HanzlaGPT",
+  "purpose": "AI-powered assistant using FastAPI and LangChain for Retrieval-Augmented Generation (RAG). Provides context-aware chat, multi-provider LLM support, and user session management.",
+  "features": [
+    "Conversational AI with RAG",
+    "Multi-provider LLM fallback",
+    "User session and chat history",
+    "Provider routing and load balancing",
+    "Health, metrics, and admin endpoints",
+    "Security: CORS, Trusted Host, optional Basic Auth"
+  ],
+  "api_endpoints": [
+    {"path": "/api/chat/query", "method": "POST", "description": "Main chat endpoint (RAG-powered)"},
+    {"path": "/api/chat/stream", "method": "POST", "description": "Streaming chat responses"},
+    {"path": "/api/chat/history/{user_id}/{session_id}", "method": "GET", "description": "Retrieve chat history"},
+    {"path": "/api/chat/health", "method": "GET", "description": "Health check"},
+    {"path": "/api/chat/provider-status", "method": "GET", "description": "Provider status"},
+    {"path": "/api/chat/metrics", "method": "GET", "description": "Usage metrics"},
+    {"path": "/api/chat/cache/clear", "method": "POST", "description": "Clear chat cache"},
+    {"path": "/api/chat/force-provider", "method": "POST", "description": "Force provider for a user (admin/debug)"}
+  ],
+  "tech_stack": [
+    "Python", "FastAPI", "LangChain", "Pinecone", "PostgreSQL", "Pydantic", "Loguru", "Uvicorn"
+  ],
+  "authentication": {
+    "type": "basic",
+    "username": "Hanzla",
+    "password": "12345"
+  }
+}

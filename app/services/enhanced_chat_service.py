@@ -11,8 +11,8 @@ from dataclasses import dataclass
 from enum import Enum
 from datetime import datetime
 from loguru import logger
-
-from app.core.vectorstore import search_across_namespaces, get_category_specific_context
+import pickle
+from app.core.vectorstore import get_category_specific_context, smart_retrieve
 from app.core.llm_providers import provider_manager
 from app.core.provider_router import provider_router
 from app.templates.enhanced_prompts import (
@@ -24,6 +24,8 @@ from app.templates.enhanced_prompts import (
     ENHANCED_PERSONAL_PROMPT as PERSONAL_PROMPT,
     ENHANCED_SYSTEM_PROMPT as SYSTEM_PROMPT
 )
+import os
+from fastapi import APIRouter, HTTPException
 
 class IntentType(Enum):
     """Enum for different intent types."""
@@ -49,6 +51,7 @@ class ChatContext:
     provider: str
     response_time_ms: int
     timestamp: datetime
+    response: str
 
 @dataclass
 class ChatResponse:
@@ -63,62 +66,69 @@ class ChatResponse:
     error: Optional[str] = None
 
 class EnhancedChatService:
-    """Enhanced chat service with professional features."""
+    """Enhanced chat service with professional features.
+
+    Uses a simple in-memory cache for chat responses. The cache key is based on user_id, session_id, and query.
+    """
     
     def __init__(self):
         self.max_retries = 3
         self.timeout_seconds = 30
         self.max_context_length = 4000
-        self.cache = {}  # Simple in-memory cache for demo
-        
+        self.cache = {}  # Simple in-memory cache
+    
+    def _cache_key(self, user_id: str, session_id: str, query: str) -> str:
+        """
+        Generate a cache key for a chat response.
+        Args:
+            user_id: The user's unique identifier.
+            session_id: The session identifier.
+            query: The user's query string.
+        Returns:
+            A string key for cache storage.
+        """
+        return f"chat_cache:{user_id}:{session_id}:{query.lower().strip()}"
+
     async def process_chat_query(
         self, 
         query: str, 
         user_id: str, 
         session_id: str,
         use_cache: bool = True
-    ) -> ChatResponse:
+    ) -> 'ChatResponse':
         """
         Process a chat query with enhanced error handling and features.
-        
+        Checks the in-memory cache for a previous response. If not found, processes the query and stores the result in the cache.
         Args:
-            query: User's query
-            user_id: User identifier
-            session_id: Session identifier
-            use_cache: Whether to use response caching
-            
+            query: User's query.
+            user_id: User identifier.
+            session_id: Session identifier.
+            use_cache: Whether to use response caching.
         Returns:
-            ChatResponse with structured response data
+            ChatResponse with structured response data.
         """
         start_time = time.time()
-        
         try:
-            # Check cache first
-            cache_key = f"{user_id}:{session_id}:{query.lower().strip()}"
+            cache_key = self._cache_key(user_id, session_id, query)
             if use_cache and cache_key in self.cache:
                 cached_response = self.cache[cache_key]
                 logger.info(f"Cache hit for query: {query[:50]}...")
                 return cached_response
-            
             # Step 1: Intent Detection
             intent_result = await self._detect_intent_async(query)
             intent = IntentType(intent_result.get("intent", "unknown"))
             confidence = intent_result.get("confidence", 0.5)
-            
             # Step 2: Context Retrieval
             context_chunks = await self._retrieve_context_async(query, intent)
-            
             # Step 3: Response Generation
             response = await self._generate_response_async(
                 query, intent, context_chunks, user_id, session_id
             )
-            
             # Step 4: Provider Information
             provider = self._get_provider_info(user_id, session_id)
-            
+            logger.info(f"[LLM] Provider used for query '{query}': {provider}")
             # Step 5: Calculate timing
             response_time_ms = int((time.time() - start_time) * 1000)
-            
             # Create response object
             chat_response = ChatResponse(
                 response=response,
@@ -129,13 +139,10 @@ class EnhancedChatService:
                 provider=provider,
                 context_used=len(context_chunks) > 0
             )
-            
-            # Cache the response
+            # Cache the response in memory
             if use_cache:
                 self.cache[cache_key] = chat_response
-                
             return chat_response
-            
         except Exception as e:
             logger.error(f"Error processing chat query: {str(e)}")
             return ChatResponse(
@@ -248,36 +255,29 @@ class EnhancedChatService:
     async def _retrieve_context_async(self, query: str, intent: IntentType) -> List[str]:
         """Retrieve context asynchronously with namespace optimization."""
         try:
-            # Determine relevant namespaces based on intent
+            # Tuned namespace mapping
             namespace_mapping = {
-                IntentType.CAREER_GUIDANCE: ['background', 'programs'],
-                IntentType.AI_ADVICE: ['ai_ml', 'projects'],
-                IntentType.CYBERSECURITY_ADVICE: ['cybersecurity', 'programs'],
-                IntentType.PERSONAL_INFO: ['background', 'personality', 'projects'],
-                IntentType.GENERAL_RAG: ['background', 'projects', 'ai_ml', 'cybersecurity', 'programs', 'personality']
+                IntentType.CAREER_GUIDANCE: ['background', 'programs', 'projects'],
+                IntentType.AI_ADVICE: ['ai_ml', 'projects', 'background'],
+                IntentType.CYBERSECURITY_ADVICE: ['cybersecurity', 'programs', 'background'],
+                IntentType.PERSONAL_INFO: ['background', 'personality', 'projects', 'programs'],
+                IntentType.GENERAL_RAG: ['projects', 'ai_ml', 'cybersecurity', 'background', 'programs', 'personality']
             }
-            
-            target_namespaces = namespace_mapping.get(intent, ['background', 'projects'])
-            
-            # Retrieve context from multiple namespaces
-            all_context = []
-            for namespace in target_namespaces:
-                try:
-                    context_chunks = get_category_specific_context(query, namespace, top_k=2)
-                    if context_chunks:
-                        all_context.extend(context_chunks)
-                except Exception as e:
-                    logger.warning(f"Error retrieving context from namespace {namespace}: {str(e)}")
-                    continue
-            
-            # Limit total context to avoid token overflow
-            max_chunks = 6
-            if len(all_context) > max_chunks:
-                all_context = all_context[:max_chunks]
-            
-            logger.info(f"Retrieved {len(all_context)} context chunks for intent: {intent.value}")
-            return all_context
-            
+            logger.info(f"[RAG] Query: '{query}' | Intent: {intent.value} | Target namespaces: {namespace_mapping.get(intent, ['background', 'projects'])}")
+            # Use new metadata-aware retriever
+            context_chunks = smart_retrieve(query, top_k=8)
+            # If still empty, fallback to old per-namespace logic
+            if not context_chunks:
+                target_namespaces = namespace_mapping.get(intent, ["background", "projects"])
+                for ns in target_namespaces:
+                    try:
+                        logger.info(f"[RAG] Fallback: Querying namespace '{ns}' for query '{query}'")
+                        chunks = get_category_specific_context(query, ns, top_k=2)
+                        context_chunks.extend(chunks)
+                    except Exception:
+                        continue
+            logger.info(f"[RAG] Context chunks retrieved: {len(context_chunks)}")
+            return context_chunks[:8]
         except Exception as e:
             logger.error(f"Error retrieving context: {str(e)}")
             return []
@@ -390,14 +390,45 @@ class EnhancedChatService:
         return sources
     
     def clear_cache(self):
-        """Clear the response cache."""
+        """
+        Clear all chat response cache entries from memory.
+        """
         self.cache.clear()
         logger.info("Response cache cleared")
     
     def get_cache_stats(self) -> Dict[str, Any]:
-        """Get cache statistics."""
+        """
+        Get statistics about the in-memory chat response cache.
+        Returns:
+            A dictionary with cache size.
+        """
+        size = len(self.cache)
         return {
-            "cache_size": len(self.cache),
-            "cache_hits": getattr(self, '_cache_hits', 0),
-            "cache_misses": getattr(self, '_cache_misses', 0)
+            "cache_size": size,
+            "cache_hits": None,  # Not tracked in in-memory version
+            "cache_misses": None
         } 
+
+def add_debug_endpoint(router: APIRouter, chat_service: EnhancedChatService):
+    if os.getenv("ENABLE_DEBUG_ENDPOINTS", "false").lower() == "true":
+        @router.post("/debug/query-info")
+        async def debug_query_info(request: dict):
+            query = request.get("query", "")
+            intent = await chat_service._detect_intent_async(query)
+            intent_type = IntentType(intent.get("intent", "unknown"))
+            # Get namespaces
+            namespace_mapping = {
+                IntentType.CAREER_GUIDANCE: ['background', 'programs'],
+                IntentType.AI_ADVICE: ['ai_ml', 'projects'],
+                IntentType.CYBERSECURITY_ADVICE: ['cybersecurity', 'programs'],
+                IntentType.PERSONAL_INFO: ['background', 'personality', 'projects'],
+                IntentType.GENERAL_RAG: ['background', 'projects', 'ai_ml', 'cybersecurity', 'programs', 'personality']
+            }
+            namespaces = namespace_mapping.get(intent_type, ["background", "projects"])
+            provider = chat_service._get_provider_info("web_user", "web_session")
+            return {
+                "query": query,
+                "intent": intent_type.value,
+                "namespaces": namespaces,
+                "provider": provider
+            } 

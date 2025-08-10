@@ -1,9 +1,74 @@
 from typing import Optional, List, Dict, Any
+# imports
 from loguru import logger
 from langchain_pinecone import PineconeVectorStore
 from app.core.config import settings
 from app.core.llm_providers import provider_manager
+
+# Self-query dependencies must be imported before they are used
+from langchain.retrievers.self_query.base import SelfQueryRetriever
+from langchain_community.query_constructors.pinecone import PineconeTranslator
+from langchain.chains.query_constructor.schema import AttributeInfo
+
 import pinecone
+
+# -------------------- Self-Query Retriever helpers --------------------
+
+# Describe our metadata schema so the LLM can formulate filters.
+METADATA_SCHEMA: List[AttributeInfo] = [
+    AttributeInfo(
+        name="namespace",
+        description="Top-level grouping (projects, ai_ml, cybersecurity, background, programs, personality).",
+        type="string",
+    ),
+    AttributeInfo(
+        name="content_type",
+        description="Sub-type such as project_summary, courses_summary, etc.",
+        type="string",
+    ),
+    AttributeInfo(
+        name="original_source",
+        description="Original filename of the chunk.",
+        type="string",
+    ),
+]
+
+
+def get_self_query_retriever(k: int = 8) -> SelfQueryRetriever:
+    """Return a Pinecone SelfQueryRetriever that understands our metadata."""
+    # Use a cheap LLM just to parse the query into filters. Prefer existing provider.
+    from app.core.llm_providers import provider_manager
+
+    llm = provider_manager.get_chat_model_by_name("openai")
+    if llm is None:
+        # final fallback to avoid crash
+        from langchain_openai import ChatOpenAI
+        llm = ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo")
+
+    vector_store = create_vector_store()  # default namespace; SQR overrides
+
+    return SelfQueryRetriever.from_llm(
+        llm,
+        vector_store,
+        document_content_description="Hanzala knowledge chunks",
+        metadata_field_info=METADATA_SCHEMA,
+        structured_query_translator=PineconeTranslator(),
+        search_kwargs={"k": k},
+    )
+
+
+def smart_retrieve(query: str, top_k: int = 8) -> List[str]:
+    """Retrieve chunk texts using SelfQueryRetriever with metadata filtering."""
+    try:
+        retriever = get_self_query_retriever(k=top_k)
+        docs = retriever.get_relevant_documents(query)
+        return [d.page_content for d in docs]
+    except Exception as e:
+        logger.error(f"SelfQueryRetriever failed, falling back: {e}")
+        # fallback to old cross-namespace search
+        results = search_across_namespaces(query, top_k=top_k)
+        return [r["document"].page_content for r in results]
+
 try:
     # Imported for backward-compatibility with tests that patch this symbol
     from langchain_community.embeddings import OpenAIEmbeddings

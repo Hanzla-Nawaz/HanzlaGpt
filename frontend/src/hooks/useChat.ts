@@ -83,6 +83,7 @@ What would you like to know?`)
           user_id: 'web_user',
           session_id: 'web_session',
           query: content.trim(),
+          stream: false,
         }),
       })
 
@@ -101,24 +102,12 @@ What would you like to know?`)
         confidence: data.confidence,
         responseTime: data.response_time_ms,
         provider: data.provider,
+        sources: data.sources ?? [],
       }
 
       setMessages(prev => [...prev, botMessage])
       setProvider(data.provider)
-      
-      // Show provider information
-      const providerName = getProviderLabel(data.provider)
-      if (data.provider?.includes('OpenAI')) {
-        toast.success(`🤖 Using OpenAI API (${data.response_time_ms}ms)`)
-      } else if (data.provider?.includes('HuggingFace')) {
-        toast.success(`🤗 Using HuggingFace API (${data.response_time_ms}ms)`)
-      } else if (data.provider?.includes('Intent-based')) {
-        toast.success(`📝 Using Intent-based fallback (${data.response_time_ms}ms)`)
-      } else if (data.provider?.includes('Ollama')) {
-        toast.success(`🦙 Using Ollama local model (${data.response_time_ms}ms)`)
-      } else {
-        toast.success(`Using ${providerName} (${data.response_time_ms}ms)`)
-      }
+      // Provider/API toast notifications removed
 
     } catch (error) {
       console.error('Failed to send message:', error)
