@@ -8,6 +8,7 @@ from typing import Dict, List, Optional
 from loguru import logger
 from app.core.llm_providers import provider_manager
 from app.core.database import get_user_provider, set_user_provider
+from typing import Optional
 
 class ProviderRouter:
     """Routes users to different providers automatically."""
@@ -89,7 +90,7 @@ class ProviderRouter:
         logger.info(f"Assigned provider {selected_provider} to user {user_id}")
         return selected_provider
     
-    def get_chat_model_for_user(self, user_id: str, session_id: str = None, requested: str | None = None):
+    def get_chat_model_for_user(self, user_id: str, session_id: str = None, requested: Optional[str] = None):
         """Return chat model honouring a requested provider or persisted mapping."""
         # Requested provider overrides & persists
         if requested:
