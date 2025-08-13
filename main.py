@@ -4,14 +4,12 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from app.api.endpoints.router import api_router
 from app.core.config import settings
-from app.core.database import create_tables
 import uvicorn
 import time
 from loguru import logger
 import sys
 from typing import List
 from contextlib import asynccontextmanager
-from app.core.database import get_all_chat_history
 from fastapi import APIRouter
 
 debug_router = APIRouter()
@@ -33,26 +31,20 @@ logger.add(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    logger.info("Starting HanzlaGPT application...")
-    try:
-        create_tables()
-        logger.info("Database tables initialized successfully")
-    except Exception as e:
-        logger.error(f"Failed to initialize database: {str(e)}")
-        raise
+    logger.info("Starting HanzlaGPT application without DB...")
     yield
     logger.info("Shutting down HanzlaGPT application...")
 
 app = FastAPI(
     title="HanzlaGPT",
-    description="Personal AI assistant using FastAPI, LangChain, and Pinecone",
+    description="Personal AI assistant using FastAPI (No DB)",
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
     lifespan=lifespan
 )
 
-# CORS setup for frontend integration
+# CORS setup
 allowed_origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -95,24 +87,17 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
         }
     )
 
-# Include API router
+# API routes (may still have DB usage internally)
 app.include_router(api_router, prefix="/api")
-
-@debug_router.get("/debug/chat-history", tags=["Debug"])
-async def debug_chat_history():
-    return get_all_chat_history()
-
-app.include_router(debug_router, prefix="/api")
 
 @app.get("/", tags=["Root"])
 async def root() -> dict:
     return {
-        "message": "Welcome to HanzlaGPT API",
+        "message": "Welcome to HanzlaGPT API (No DB)",
         "version": "1.0.0",
         "status": "running",
         "docs": "/docs"
     }
-
 
 if __name__ == "__main__":
     logger.info("Starting HanzlaGPT server...")
@@ -123,4 +108,3 @@ if __name__ == "__main__":
         log_level="info",
         access_log=True
     )
-
