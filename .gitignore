@@ -10,7 +10,8 @@ app/data/
 frontend/node_modules/
 Hanzlagpt_backend/
 Hanzlagpt_backend.zip
-
+deploy-v2.zip
+fastapi.pem
 
 # Distribution / packaging
 .Python
