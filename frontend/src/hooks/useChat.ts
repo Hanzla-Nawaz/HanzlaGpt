@@ -3,10 +3,10 @@ import { Message, ChatResponse, GreetingResponse, HealthResponse } from '../type
 import toast from 'react-hot-toast'
 
 // API prefix selection:
-// - In production (Vercel), call the serverless proxy at /api/proxy
+// - In production (Vercel), call /api (rewritten to /api/proxy by vercel.json)
 // - In development, call explicit backend URL or localhost
 const API_PREFIX = import.meta.env.PROD
-  ? '/api/proxy'
+  ? '/api'
   : (import.meta.env.VITE_API_URL || 'http://localhost:8000')
 
 export const useChat = () => {
