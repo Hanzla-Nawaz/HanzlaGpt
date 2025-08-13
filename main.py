@@ -10,9 +10,6 @@ from loguru import logger
 import sys
 from typing import List
 from contextlib import asynccontextmanager
-from fastapi import APIRouter
-
-debug_router = APIRouter()
 
 # Configure logging
 logger.remove()
@@ -29,22 +26,17 @@ logger.add(
     level="DEBUG"
 )
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    logger.info("Starting HanzlaGPT application without DB...")
-    yield
-    logger.info("Shutting down HanzlaGPT application...")
+# Remove lifespan and database initialization
 
 app = FastAPI(
     title="HanzlaGPT",
-    description="Personal AI assistant using FastAPI (No DB)",
+    description="Personal AI assistant using FastAPI, LangChain, and Pinecone",
     version="1.0.0",
     docs_url="/docs",
-    redoc_url="/redoc",
-    lifespan=lifespan
+    redoc_url="/redoc"
 )
 
-# CORS setup
+# CORS setup for frontend integration
 allowed_origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
@@ -87,24 +79,34 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
         }
     )
 
-# API routes (may still have DB usage internally)
+# Include API router
 app.include_router(api_router, prefix="/api")
+
+# Remove debug_router and chat-history endpoint (database dependent)
 
 @app.get("/", tags=["Root"])
 async def root() -> dict:
     return {
-        "message": "Welcome to HanzlaGPT API (No DB)",
+        "message": "Welcome to HanzlaGPT API",
         "version": "1.0.0",
         "status": "running",
         "docs": "/docs"
     }
 
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok"}
+
+@app.get("/api/chat/health")
+def api_chat_health():
+    return {"status": "ok"}
+
 if __name__ == "__main__":
     logger.info("Starting HanzlaGPT server...")
     uvicorn.run(
         app, 
-        host="0.0.0.0",  
-        port=int(os.environ.get("PORT", 8000)),
+        host="0.0.0.0", 
+        port=8000,
         log_level="info",
         access_log=True
     )
