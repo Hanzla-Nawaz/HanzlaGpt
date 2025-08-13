@@ -37,6 +37,8 @@
     "@typescript-eslint/parser": "^6.10.0",
     "eslint": "^8.53.0",
     "eslint-plugin-react-hooks": "^4.6.0",
-    "eslint-plugin-react-refresh": "^0.4.4"
+    "eslint-plugin-react-refresh": "^0.4.4",
+    "@vercel/node": "^3.0.0",
+    "@types/node": "^20.0.0"
   }
 }

@@ -1,19 +1,25 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
 // Backend URL comes from Vercel env (Project Settings -> Environment Variables)
-// Example: https://untitled-journals-earl-outlined.trycloudflare.com
+// Example: https://wp-acquired-updates-providing.trycloudflare.com
 const BACKEND_URL = process.env.BACKEND_URL
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     if (!BACKEND_URL) {
+      console.error('Missing BACKEND_URL environment variable')
       res.status(500).json({ error: 'Missing BACKEND_URL env var' })
       return
     }
 
+    // Extract path from query parameters
     const { path = [] } = req.query as { path?: string[] }
     const targetPath = Array.isArray(path) ? path.join('/') : String(path || '')
+    
+    // Construct the full URL to the backend
     const url = `${BACKEND_URL.replace(/\/$/, '')}/api/${targetPath}`
+    
+    console.log(`Proxying request: ${req.method} ${req.url} -> ${url}`)
 
     // Build headers for upstream, stripping hop-by-hop and problematic headers
     const upstreamHeaders: Record<string, string> = {}
@@ -36,7 +42,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       else body = String(raw)
     }
 
+    console.log(`Making request to backend: ${method} ${url}`)
     const response = await fetch(url, { method, headers: upstreamHeaders, body } as any)
+
+    console.log(`Backend response: ${response.status}`)
 
     // Mirror response
     res.status(response.status)
@@ -55,6 +64,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.send(buffer)
     }
   } catch (err: any) {
+    console.error('Proxy error:', err)
     res.status(502).json({ error: 'Proxy error', detail: err?.message || String(err) })
   }
 }
