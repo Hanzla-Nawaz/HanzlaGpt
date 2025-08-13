@@ -22,20 +22,26 @@ export const useChat = () => {
   const [greeting, setGreeting] = useState<string | null>(null)
   const [provider, setProvider] = useState<string | null>(null)
   const [isConnected, setIsConnected] = useState(false)
+  const [connectionError, setConnectionError] = useState<string | null>(null)
 
   const checkHealth = useCallback(async () => {
     try {
+      setConnectionError(null)
       const response = await fetch(`${API_PREFIX}/api/chat/health`)
       if (response.ok) {
         const data: HealthResponse = await response.json()
         setIsConnected(true)
         setProvider(data.providers.chat.active)
         return true
+      } else {
+        setConnectionError(`Backend responded with status: ${response.status}`)
+        setIsConnected(false)
       }
     } catch (error) {
       console.error('Health check failed:', error)
+      setConnectionError('Cannot connect to backend. Make sure it\'s running on localhost:8000')
+      setIsConnected(false)
     }
-    setIsConnected(false)
     return false
   }, [])
 
@@ -160,5 +166,6 @@ What would you like to know?`)
     greeting,
     provider,
     isConnected,
+    connectionError,
   }
 }
