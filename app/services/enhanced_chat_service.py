@@ -27,7 +27,7 @@ from app.templates.enhanced_prompts import (
 import os
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
-from app.core.database import get_chat_history
+from app.core.database import get_chat_history, log_chat
 import tiktoken
 
 class IntentType(Enum):
@@ -194,6 +194,21 @@ class EnhancedChatService:
                 provider=provider,
                 context_used=len(context_chunks) > 0
             )
+            
+            # Log chat history to database
+            try:
+                log_chat(
+                    user_id=user_id or "anonymous",
+                    session_id=session_id or "default",
+                    query=query,
+                    answer=response,
+                    intent=intent.value,
+                    response_time_ms=response_time_ms
+                )
+                logger.info(f"Chat history logged for user {user_id}, session {session_id}")
+            except Exception as e:
+                logger.warning(f"Failed to log chat history: {e}")
+            
             # Cache the response in memory
             if use_cache:
                 self.cache[cache_key] = chat_response

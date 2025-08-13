@@ -63,4 +63,30 @@ async def get_enhanced_greeting():
             "provider": "Unknown",
             "system_status": "fallback"
         }
+
+@enhanced_chat_router.get("/history")
+async def get_chat_history_endpoint(
+    user_id: str = "anonymous",
+    session_id: str = "default",
+    limit: int = 50
+):
+    """Get chat history for a user and session."""
+    try:
+        from app.core.database import get_chat_history
+        history = get_chat_history(user_id, session_id, limit)
+        return {
+            "user_id": user_id,
+            "session_id": session_id,
+            "history": history,
+            "count": len(history)
+        }
+    except Exception as e:
+        logger.error(f"Failed to get chat history: {str(e)}")
+        return {
+            "user_id": user_id,
+            "session_id": session_id,
+            "history": [],
+            "count": 0,
+            "error": "Failed to retrieve chat history"
+        }
          
