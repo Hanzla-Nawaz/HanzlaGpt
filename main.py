@@ -4,17 +4,12 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 from app.api.endpoints.router import api_router
 from app.core.config import settings
-from app.core.database import create_tables
 import uvicorn
 import time
 from loguru import logger
 import sys
 from typing import List
 from contextlib import asynccontextmanager
-from app.core.database import get_all_chat_history
-from fastapi import APIRouter
-
-debug_router = APIRouter()
 
 # Configure logging
 logger.remove()
@@ -31,25 +26,14 @@ logger.add(
     level="DEBUG"
 )
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    logger.info("Starting HanzlaGPT application...")
-    try:
-        create_tables()
-        logger.info("Database tables initialized successfully")
-    except Exception as e:
-        logger.error(f"Failed to initialize database: {str(e)}")
-        raise
-    yield
-    logger.info("Shutting down HanzlaGPT application...")
+# Remove lifespan and database initialization
 
 app = FastAPI(
     title="HanzlaGPT",
     description="Personal AI assistant using FastAPI, LangChain, and Pinecone",
     version="1.0.0",
     docs_url="/docs",
-    redoc_url="/redoc",
-    lifespan=lifespan
+    redoc_url="/redoc"
 )
 
 # CORS setup for frontend integration
@@ -98,11 +82,7 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 # Include API router
 app.include_router(api_router, prefix="/api")
 
-@debug_router.get("/debug/chat-history", tags=["Debug"])
-async def debug_chat_history():
-    return get_all_chat_history()
-
-app.include_router(debug_router, prefix="/api")
+# Remove debug_router and chat-history endpoint (database dependent)
 
 @app.get("/", tags=["Root"])
 async def root() -> dict:
@@ -113,11 +93,19 @@ async def root() -> dict:
         "docs": "/docs"
     }
 
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok"}
+
+@app.get("/api/chat/health")
+def api_chat_health():
+    return {"status": "ok"}
+
 if __name__ == "__main__":
     logger.info("Starting HanzlaGPT server...")
     uvicorn.run(
         app, 
-        host="127.0.0.1", 
+        host="0.0.0.0", 
         port=8000,
         log_level="info",
         access_log=True
