@@ -27,7 +27,7 @@ export const useChat = () => {
   const checkHealth = useCallback(async () => {
     try {
       setConnectionError(null)
-      const response = await fetch(`${API_PREFIX}/api/chat/health`)
+      const response = await fetch(`${API_PREFIX}/chat/health`)
       if (response.ok) {
         const data: HealthResponse = await response.json()
         setIsConnected(true)
@@ -47,7 +47,7 @@ export const useChat = () => {
 
   const loadGreeting = useCallback(async () => {
     try {
-      const response = await fetch(`${API_PREFIX}/api/chat/greeting`)
+      const response = await fetch(`${API_PREFIX}/chat/greeting`)
       if (response.ok) {
         const data: GreetingResponse = await response.json()
         setGreeting(data.message)
@@ -84,7 +84,7 @@ What would you like to know?`)
     setIsLoading(true)
 
     try {
-      const response = await fetch(`${API_PREFIX}/api/chat/query`, {
+      const response = await fetch(`${API_PREFIX}/chat/query`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
