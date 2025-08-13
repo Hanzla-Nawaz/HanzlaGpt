@@ -4,10 +4,17 @@ import toast from 'react-hot-toast'
 
 // API prefix selection:
 // - In production (Vercel), call /api (rewritten to /api/proxy by vercel.json)
-// - In development, call explicit backend URL or localhost
-const API_PREFIX = import.meta.env.PROD
-  ? '/api'
-  : (import.meta.env.VITE_API_URL || 'http://localhost:8000')
+// - In development, automatically detect if localhost backend is running
+const getApiPrefix = () => {
+  if (import.meta.env.PROD) {
+    return '/api' // Vercel will rewrite /api/* to /api/proxy/*
+  }
+  
+  // In development, try to connect to localhost backend
+  return 'http://localhost:8000'
+}
+
+const API_PREFIX = getApiPrefix()
 
 export const useChat = () => {
   const [messages, setMessages] = useState<Message[]>([])
@@ -18,7 +25,7 @@ export const useChat = () => {
 
   const checkHealth = useCallback(async () => {
     try {
-      const response = await fetch(`${API_PREFIX}/chat/health`)
+      const response = await fetch(`${API_PREFIX}/api/chat/health`)
       if (response.ok) {
         const data: HealthResponse = await response.json()
         setIsConnected(true)
@@ -34,7 +41,7 @@ export const useChat = () => {
 
   const loadGreeting = useCallback(async () => {
     try {
-      const response = await fetch(`${API_PREFIX}/chat/greeting`)
+      const response = await fetch(`${API_PREFIX}/api/chat/greeting`)
       if (response.ok) {
         const data: GreetingResponse = await response.json()
         setGreeting(data.message)
@@ -71,7 +78,7 @@ What would you like to know?`)
     setIsLoading(true)
 
     try {
-      const response = await fetch(`${API_PREFIX}/chat/query`, {
+      const response = await fetch(`${API_PREFIX}/api/chat/query`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
