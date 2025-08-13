@@ -11,7 +11,7 @@ const getApiPrefix = () => {
   }
   
   // In development, try to connect to localhost backend
-  return 'http://localhost:8000'
+  return 'http://localhost:8000/api'
 }
 
 const API_PREFIX = getApiPrefix()
