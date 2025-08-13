@@ -36,15 +36,8 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# CORS setup for frontend integration
-allowed_origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "http://localhost:8000",
-    "http://127.0.0.1:8000"
-]
+allowed_origins = [h.strip() for h in settings.ALLOWED_ORIGINS.split(",") if h.strip()]
 allowed_hosts: List[str] = [h.strip() for h in settings.ALLOWED_HOSTS.split(",") if h.strip()]
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
