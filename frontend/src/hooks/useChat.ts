@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback } from 'react'
 import { Message, ChatResponse, GreetingResponse, HealthResponse } from '../types/chat'
 import toast from 'react-hot-toast'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+// In production (on Vercel), use same-origin relative path and let Vercel proxy to the backend.
+// In development, use explicit URL if provided, else localhost.
+const API_BASE_URL = import.meta.env.PROD ? '' : (import.meta.env.VITE_API_URL || 'http://localhost:8000')
 
 export const useChat = () => {
   const [messages, setMessages] = useState<Message[]>([])

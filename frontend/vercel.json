@@ -1,4 +1,9 @@
 {
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/proxy/$1" }
+  ]
+}
+{
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": "vite",
