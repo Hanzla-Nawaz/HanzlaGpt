@@ -2,12 +2,12 @@ import { useState, useEffect, useCallback } from 'react'
 import { Message, ChatResponse, GreetingResponse, HealthResponse } from '../types/chat'
 import toast from 'react-hot-toast'
 
-// Robust base URL selection:
-// - On Vercel (production), always use same-origin relative path ('') so requests go through the proxy
-// - Locally, use VITE_API_URL if provided, otherwise localhost
-const isBrowser = typeof window !== 'undefined'
-const isProdLike = (import.meta.env.PROD || (isBrowser && !/localhost|127\.0\.0\.1/i.test(window.location.hostname)))
-const API_BASE_URL = isProdLike ? '' : (import.meta.env.VITE_API_URL || 'http://localhost:8000')
+// API prefix selection:
+// - In production (Vercel), call the serverless proxy at /api/proxy
+// - In development, call explicit backend URL or localhost
+const API_PREFIX = import.meta.env.PROD
+  ? '/api/proxy'
+  : (import.meta.env.VITE_API_URL || 'http://localhost:8000')
 
 export const useChat = () => {
   const [messages, setMessages] = useState<Message[]>([])
@@ -18,7 +18,7 @@ export const useChat = () => {
 
   const checkHealth = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/chat/health`)
+      const response = await fetch(`${API_PREFIX}/chat/health`)
       if (response.ok) {
         const data: HealthResponse = await response.json()
         setIsConnected(true)
@@ -34,7 +34,7 @@ export const useChat = () => {
 
   const loadGreeting = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/chat/greeting`)
+      const response = await fetch(`${API_PREFIX}/chat/greeting`)
       if (response.ok) {
         const data: GreetingResponse = await response.json()
         setGreeting(data.message)
@@ -71,7 +71,7 @@ What would you like to know?`)
     setIsLoading(true)
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/chat/query`, {
+      const response = await fetch(`${API_PREFIX}/chat/query`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
