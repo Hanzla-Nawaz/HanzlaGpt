@@ -5,6 +5,7 @@ from app.core.config import settings
 from loguru import logger
 from typing import Optional, Dict, Any
 import contextlib
+from typing import Optional
 
 # Connection pool
 _pool: Optional[SimpleConnectionPool] = None
@@ -179,7 +180,7 @@ def get_chat_history(user_id: str, session_id: str, limit: int = 50) -> list:
         logger.error(f"Failed to get chat history: {str(e)}")
         return []
 
-def get_user_provider(user_id: str) -> str | None:
+def get_user_provider(user_id: str) -> Optional[str]:
     """Return stored provider name for user, or None."""
     try:
         with get_db_connection() as conn:
